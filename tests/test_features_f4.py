@@ -120,3 +120,78 @@ def test_fit이_본_행_밖의_데이터는_결과에_전혀_영향을_주지_�
     # 즉 이 테스트가 실제로 무언가를 검증하고 있음(민감함)을 증명한다.
     assert out_with_future["analog_mean_d1"] == pytest.approx(100.0)
     assert out_with_future["type_prior"] == pytest.approx(50.5)
+
+
+# ---------------------------------------------------------------------------
+# 자기포함(self-inclusion) 누수 방지 — transform()의 exclude_key 파라미터
+#
+# fit()에 넘긴 행이 동시에 transform() 질의 대상이기도 한 경우(Task 11이
+# 학습 폴드 자체의 피처를 만들 때 실제로 발생), exclude_key로 그 행을 자기
+# 자신의 후보 풀에서 빼지 않으면 그 행의 라벨(d1)이 자기 자신의 피처로
+# 그대로 새어 들어온다. 아래 테스트들은 이 문제를 재현하고 수정을 검증한다.
+# ---------------------------------------------------------------------------
+
+def self_incl_rows():
+    return pd.DataFrame({
+        "ctype": ["정책·정부", "정책·정부", "테마·수혜", "실적·호재", "공시·계약"],
+        "reason": ["정부 정책 수혜 기대", "정부 지원 정책 발표", "반도체 테마 관련주 부각",
+                   "분기 실적 개선 발표", "대규모 수주 계약 체결"],
+        "d1": [999.0, 1.0, -2.0, 4.0, -1.0],
+    }, index=[100, 101, 102, 103, 104])
+
+
+def test_제외없이_질의하면_자기라벨이_analog에_그대로_남는다():
+    """exclude_key를 안 주면 기존 동작(자기포함 누수)이 그대로 재현된다 —
+    즉 이 수정이 옵트인이며, 차이가 실제로 관측 가능함을 보여준다."""
+    idx = features_f4.CatalystIndex()
+    idx.fit(self_incl_rows())
+    out = idx.transform("정책·정부", "정부 정책 수혜 기대", k=1)
+    assert out["analog_mean_d1"] == pytest.approx(999.0)
+    assert out["type_prior"] == pytest.approx(500.0)   # (999+1)/2
+
+
+def test_자기제외_켜면_자기라벨이_analog와_type_prior에서_빠진다():
+    idx = features_f4.CatalystIndex()
+    idx.fit(self_incl_rows())
+    out = idx.transform("정책·정부", "정부 정책 수혜 기대", k=1, exclude_key=100)
+    assert out["analog_mean_d1"] != pytest.approx(999.0)
+    assert out["analog_mean_d1"] in {1.0, -2.0, 4.0, -1.0}
+    assert out["analog_n"] == 1
+    assert out["type_prior"] == pytest.approx(1.0)      # 999 제외, 남은 건 1.0 하나
+
+
+def test_유일멤버_유형을_제외하면_전체평균으로_대체되고_NaN이_아니다():
+    rows = pd.DataFrame({
+        "ctype": ["단독유형", "테마·수혜", "실적·호재"],
+        "reason": ["유일한 사유 문장", "반도체 테마 관련주 부각", "분기 실적 개선 발표"],
+        "d1": [50.0, -2.0, 4.0],
+    }, index=[200, 201, 202])
+    idx = features_f4.CatalystIndex()
+    idx.fit(rows)
+    out = idx.transform("단독유형", "유일한 사유 문장", exclude_key=200)
+    assert out["type_prior"] == pytest.approx(1.0)      # 전체(52) 중 자기(50) 뺀 나머지 평균 = (-2+4)/2
+    assert not np.isnan(out["type_prior"])
+
+
+def test_analog_n이_자기제외로_풀이_k와_같을때_1개_줄어든다():
+    rows = pd.DataFrame({
+        "ctype": ["정책·정부"] * 3,
+        "reason": ["자기자신 문장", "비슷한 문장 하나", "비슷한 문장 둘"],
+        "d1": [10.0, 1.0, 2.0],
+    }, index=[300, 301, 302])
+    idx = features_f4.CatalystIndex()
+    idx.fit(rows)
+    without = idx.transform("정책·정부", "자기자신 문장", k=3)
+    with_excl = idx.transform("정책·정부", "자기자신 문장", k=3, exclude_key=300)
+    assert without["analog_n"] == 3
+    assert with_excl["analog_n"] == 2
+
+
+def test_exclude_key가_fit집합에_없으면_기존동작과_동일하다():
+    """검정 구간의 정상 경로: exclude_key로 자기 자신의 인덱스를 넘겨도
+    그 값이 학습 구간(fit 집합)에 없으면 아무 것도 배제되지 않는다."""
+    idx = features_f4.CatalystIndex()
+    idx.fit(self_incl_rows())
+    baseline = idx.transform("정책·정부", "정부 정책 수혜 기대", k=1)
+    with_missing_key = idx.transform("정책·정부", "정부 정책 수혜 기대", k=1, exclude_key=999999)
+    assert with_missing_key == baseline
