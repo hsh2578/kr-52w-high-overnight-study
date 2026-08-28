@@ -34,23 +34,15 @@ def mark_halted(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def load_ohlcv() -> dict[str, pd.DataFrame]:
-    """갱신본이 있으면 그것을, 없으면 HollyKR 원본을 읽는다.
+def _dedup_longest(cache: dict) -> dict[str, pd.DataFrame]:
+    """캐시 항목을 code 단위로 묶어 가장 긴 시계열만 남긴다.
 
-    원본은 key가 "{code}_{days}" 형태라 code별 최장 시계열만 남긴다.
-    반환 전에 mark_halted를 적용한다.
+    key 형태는 항목마다 개별 판단한다("{code}_{days}"면 접미사를 벗기고,
+    아니면 그대로 code로 쓴다) — 캐시 전체의 형태를 첫 key 하나만 보고
+    판단하면 혼재된 캐시(플레인 key와 접미사 key가 섞인 경우)에서
+    접미사가 안 벗겨진 채로 새어나갈 수 있기 때문이다.
+    None이거나 빈 DataFrame인 항목은 건너뛴다.
     """
-    if config.CACHE_PATH.exists():
-        with open(config.CACHE_PATH, "rb") as f:
-            cache = pickle.load(f)
-        if cache and not re.match(r"\d+_\d+$", next(iter(cache))):
-            return {k: mark_halted(v[OHLCV_COLS])
-                    for k, v in cache.items() if v is not None}
-    else:
-        path = config.HOLLYKR_CACHE / "ohlcv" / "ohlcv_cache.pkl"
-        with open(path, "rb") as f:
-            cache = pickle.load(f)
-
     best: dict[str, pd.DataFrame] = {}
     for key, df in cache.items():
         m = re.match(r"(\d+)_(\d+)$", str(key))
@@ -59,6 +51,29 @@ def load_ohlcv() -> dict[str, pd.DataFrame]:
             continue
         if code not in best or len(df) > len(best[code]):
             best[code] = df
+    return best
+
+
+def load_ohlcv() -> dict[str, pd.DataFrame]:
+    """갱신본이 있으면 그것을, 없거나 쓸 항목이 없으면 HollyKR 원본을 읽는다.
+
+    key 형태 판단과 code별 최장 시계열 선택은 _dedup_longest가 항목별로
+    처리한다. 갱신본이 존재하더라도 언피클 결과가 빈 dict이거나 유효한
+    항목이 하나도 없으면(None/빈 DataFrame뿐이면) 원본으로 대체한다.
+    반환 전에 mark_halted를 적용한다.
+    """
+    best: dict[str, pd.DataFrame] = {}
+    if config.CACHE_PATH.exists():
+        with open(config.CACHE_PATH, "rb") as f:
+            cache = pickle.load(f)
+        best = _dedup_longest(cache)
+
+    if not best:
+        path = config.HOLLYKR_CACHE / "ohlcv" / "ohlcv_cache.pkl"
+        with open(path, "rb") as f:
+            cache = pickle.load(f)
+        best = _dedup_longest(cache)
+
     return {c: mark_halted(d[OHLCV_COLS]) for c, d in best.items()}
 
 
