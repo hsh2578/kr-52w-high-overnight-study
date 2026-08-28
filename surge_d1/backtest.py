@@ -487,7 +487,7 @@ def _apply_one_time_cost(ret: pd.Series, cost: float) -> pd.Series:
     return out
 
 
-def market_benchmark(df: pd.DataFrame) -> pd.DataFrame:
+def market_benchmark(df: pd.DataFrame, window=None) -> pd.DataFrame:
     """벤치마크: 시장을 그냥 사서 계속 들고 있었다면(buy & hold).
 
     FinRL 이 항상 지수(^DJI)와 나란히 보고하는 관행을 따른다 — 전략 수익률만
@@ -503,17 +503,28 @@ def market_benchmark(df: pd.DataFrame) -> pd.DataFrame:
          (1-COST)배로 균일하게 스케일하면 되므로, 첫날 수익률에 한 번만
          반영한다(등가곱 (1+r1)(1+r2)...(1+rT) = (1-COST)×원래 등가곱과
          정확히 같다 — MDD처럼 비율만 보는 지표는 왜곡되지 않는다).
+
+    ⚠️ **최종 검토로 재수정**: 예전 버전은 전 구간(1,879거래일, 2019~2026)을
+    썼는데 전략들은 walk-forward 검정 구간(880거래일, 2023~2026)만 덮는다.
+    같은 표에 다른 기간의 행을 나란히 두면 사과 대 사과 비교가 아니다 —
+    실제로 전 구간 기준 MDD는 40.3%였으나 880일로 맞추면 24.7%다.
+    그래서 `window` 로 검정 구간을 받아 **같은 날짜 범위로 잘라낸 뒤** 비용을
+    한 번 문다(자르고 나서 비용을 물어야 첫날이 검정 시작일이 된다).
     """
     from surge_d1 import sources
 
     ohlcv = sources.load_ohlcv()
     mi = sources.build_market_index(ohlcv)
-    hold = _apply_one_time_cost(mi["ret"].dropna(), config.COST)
+    ret = mi["ret"].dropna()
+    if window is not None and len(window):
+        lo, hi = pd.Timestamp(min(window)), pd.Timestamp(max(window))
+        ret = ret[(ret.index >= lo) & (ret.index <= hi)]
+    hold = _apply_one_time_cost(ret, config.COST)
     out = pd.DataFrame({"ret": hold, "n_picked": mi["n"].reindex(hold.index)})
     return out
 
 
-def market_gap_diagnostic(df: pd.DataFrame) -> pd.DataFrame:
+def market_gap_diagnostic(df: pd.DataFrame, window=None) -> pd.DataFrame:
     """진단용(참고): 시장 전체에 이벤트/모델 전략과 같은 매매방식을 적용했다면.
 
     이것은 벤치마크가 아니다 — "종가 매수 → 익일 시가 매도"를 시장 전체에
@@ -526,7 +537,12 @@ def market_gap_diagnostic(df: pd.DataFrame) -> pd.DataFrame:
 
     ohlcv = sources.load_ohlcv()
     mi = sources.build_market_index(ohlcv)
-    gap = mi["gap"].dropna() - config.COST
+    gap = mi["gap"].dropna()
+    if window is not None and len(window):
+        # 전략들과 같은 검정 구간으로 자른다(최종 검토 Critical 1).
+        lo, hi = pd.Timestamp(min(window)), pd.Timestamp(max(window))
+        gap = gap[(gap.index >= lo) & (gap.index <= hi)]
+    gap = gap - config.COST
     out = pd.DataFrame({"ret": gap, "n_picked": mi["n"].reindex(gap.index)})
     return out
 
@@ -542,7 +558,9 @@ def run_backtest(df: pd.DataFrame
     테스트) 안전하게 확장했다.
     """
     oos = out_of_sample_predictions(df)
-    mkt = market_benchmark(df)
+    # 벤치마크를 전략들과 **같은 검정 구간**으로 자른다(최종 검토 Critical 1).
+    win = oos["date"]
+    mkt = market_benchmark(df, window=win)
 
     # 메인 6종 — 그림 하나에 들어가고, 각각 다른 질문에 답한다
     strategies = {
@@ -558,7 +576,7 @@ def run_backtest(df: pd.DataFrame
     appendix = {
         # 벤치마크가 아니라 진단용 참고치: 시장 전체에 model_*/rule_* 전략과
         # 같은 매매방식(종가매수→익일시가매도, 비용 매일)을 적용했다면.
-        "market_gap_daily": market_gap_diagnostic(df),
+        "market_gap_daily": market_gap_diagnostic(df, window=win),
         "model_prob55": simulate_threshold(oos, "score", 0.55),
         "model_ret_pos": simulate_threshold(oos, "pred_ret", 0.0),
         "model_top10": simulate(oos, "score", 10),

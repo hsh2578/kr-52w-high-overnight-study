@@ -228,3 +228,42 @@ def test_capacity_table은_전략별_median과_p10을_담는다():
     # score 상위 2 = liquidity 10, 20 두 값씩 이틀 -> median 15
     assert row["median"] == pytest.approx(15.0)
     assert row["n"] == 4
+
+
+# --- 최종 검토 대응: 벤치마크 기간 정합 + 임계값 전략 현금일 ---
+
+def test_market_benchmark이_검정구간으로_잘린다():
+    """전략은 880일인데 벤치마크가 1,879일이면 사과 대 사과 비교가 아니다."""
+    import pandas as pd
+    from surge_d1 import backtest as bt
+    win = pd.Series(pd.to_datetime(["2023-01-03", "2026-08-27"]))
+    full = bt.market_benchmark(None)
+    clipped = bt.market_benchmark(None, window=win)
+    assert len(clipped) < len(full)
+    assert clipped.index.min() >= pd.Timestamp("2023-01-03")
+    assert clipped.index.max() <= pd.Timestamp("2026-08-27")
+
+
+def test_market_benchmark이_비용을_딱_한번만_문다():
+    """매수후보유인데 매일 비용을 떼면 890일이면 -187%가 누적된다."""
+    import numpy as np, pandas as pd
+    from surge_d1 import backtest as bt, config
+    win = pd.Series(pd.to_datetime(["2023-01-03", "2026-08-27"]))
+    m = bt.market_benchmark(None, window=win)
+    # 비용을 매일 뗐다면 일평균이 최소 COST만큼 낮아졌을 것이다
+    assert m["ret"].mean() > -config.COST / 2
+
+
+def test_simulate_threshold는_픽없는날을_현금으로_남긴다():
+    """조건 미달일을 빼버리면 거래일 수가 줄어 CAGR이 부풀려진다."""
+    import numpy as np, pandas as pd
+    from surge_d1 import backtest as bt
+    df = pd.DataFrame({
+        "date": pd.to_datetime(["2024-01-02"] * 2 + ["2024-01-03"] * 2),
+        "y_raw": [0.05, 0.01, 0.05, 0.01],
+        "s": [0.9, 0.8, 0.1, 0.2],      # 둘째 날은 아무도 임계값을 못 넘는다
+    })
+    out = bt.simulate_threshold(df, "s", 0.5)
+    assert len(out) == 2                                  # 이틀 다 남아야 한다
+    assert out.iloc[1]["n_picked"] == 0
+    assert out.iloc[1]["ret"] == 0.0                      # 현금 = 수익률 0

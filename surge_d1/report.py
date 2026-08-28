@@ -36,12 +36,12 @@ MODEL_ORDER = ["M0", "M1", "M2", "M3", "M4", "M4prime", "M5"]
 MAIN_STRATEGIES = ["model_top5", "model_top10", "rule_top5_close",
                    "all_breakouts", "random_5", "market"]
 
-# 2026 검정 폴드(walk-forward 마지막 폴드, n=4,277)에서 확인한 벤치마크.
-# validate.top_decile_return(df["y_raw"], df[<col>], df["date"])를 M4 폴드
-# 분할(validate.walk_forward_folds(df["date"], models.TEST_YEARS)[-1])에
-# 적용해 얻은 값이며 ablation.csv의 M4 fold=4 top_decile(5.3449%)과 동일한
-# 표본이다. `python -m surge_d1.report`를 다시 돌리면 ablation.csv가
-# 새로 계산되므로 이 상수도 그때 맞춰 갱신한다.
+# 2026 검정 폴드(walk-forward 마지막 폴드)의 단일지표 벤치마크.
+#
+# 아래는 **폴백 값일 뿐이다.** `main()`이 `compute_bench_2026(df)`로 매번
+# 재계산해 이 딕셔너리를 덮어쓴다 — 데이터가 갱신되면 리포트 수치도 함께
+# 움직여야 하는데, 하드코딩만 두면 조용히 어긋나기 때문이다. 재계산 결과가
+# 이 값과 0.1%p 넘게 벌어지면 경고를 찍어 드리프트를 드러낸다.
 BENCH_2026 = {
     "n_picks": 444,
     "overall_n": 4277,
@@ -52,6 +52,52 @@ BENCH_2026 = {
     "rsv_20": {"mean": 0.04633, "winrate": 0.660},
     "random": {"mean": 0.00737, "winrate": 0.486},
 }
+
+def compute_bench_2026(df: pd.DataFrame) -> dict:
+    """마지막(2026) 검정 폴드에서 단일지표 상위10% 벤치마크를 재계산한다.
+
+    `perfect`는 정답(`y_raw`)으로 정렬한 이론적 상한이라 달성 불가능하지만,
+    "모델이 얼마나 남겨두었나"의 척도로 쓴다. `random`은 고정 시드로 뽑아
+    실행 간 재현된다.
+    """
+    from surge_d1 import models, validate      # 순환 import 회피(모듈 관례)
+
+    folds = validate.walk_forward_folds(df["date"], models.TEST_YEARS)
+    te = df.loc[folds[-1][1]].dropna(subset=["y_raw"])
+    y, d = te["y_raw"], te["date"]
+
+    def one(score: pd.Series) -> dict:
+        # top_decile_return과 같은 규칙(날짜별 상위 10%, 3종목 미만 날 제외)으로
+        # 픽을 재현해 평균과 승률을 함께 낸다.
+        keep = []
+        for _, g in pd.DataFrame({"y": y, "s": score, "d": d}).groupby("d"):
+            if len(g) < 3:
+                continue
+            k = max(1, int(round(len(g) * 0.1)))
+            keep.append(g.nlargest(k, "s"))
+        picks = pd.concat(keep) if keep else pd.DataFrame(columns=["y"])
+        return {"n": len(picks), "mean": float(picks["y"].mean()),
+                "winrate": float((picks["y"] > 0).mean())}
+
+    cand = {"perfect": y, "close_strength": te["close_strength"],
+            "rsv_20": te["RSV_20"]}
+    res = {k: one(v) for k, v in cand.items()}
+
+    # 무작위 기준선은 단일 추첨이면 표본노이즈가 크다(실측 ±0.44%p). 30회
+    # 평균을 써서 "아무 신호 없이 뽑았을 때의 기대값"에 가깝게 만든다.
+    rng = np.random.default_rng(config.RANDOM_SEED)
+    draws = [one(pd.Series(rng.random(len(te)), index=te.index))
+             for _ in range(30)]
+    res["random"] = {"n": draws[0]["n"],
+                     "mean": float(np.mean([x["mean"] for x in draws])),
+                     "winrate": float(np.mean([x["winrate"] for x in draws]))}
+    out = {"n_picks": res["perfect"]["n"], "overall_n": len(te),
+           "overall_winrate": float((y > 0).mean()),
+           "overall_mean": float(y.mean())}
+    out.update({k: {"mean": v["mean"], "winrate": v["winrate"]}
+                for k, v in res.items()})
+    return out
+
 
 _STEP_ORDER = [("M0", "M1"), ("M1", "M2"), ("M2", "M3"), ("M3", "M4"),
               ("M4prime", "M5")]
@@ -676,6 +722,13 @@ def write_report(df: pd.DataFrame, ab: pd.DataFrame, lk: pd.DataFrame,
         "지표 정의 출처: Sortino/Calmar/Alpha/Beta = vectorbt `returns/nb.py`,",
         "MDD 지속일수 = backtrader `analyzers/drawdown.py`, SQN = backtrader `analyzers/sqn.py`",
         "(Van K. Tharp: 2.0~2.4 평균 / 2.5~2.9 양호 / 3.0~5.0 우수, 표본 30건 미만은 신뢰 불가).",
+        "**기간 정렬:** `market`은 전략들과 **같은 검정 구간**(첫 OOS일~마지막 "
+        "OOS일)으로 잘라 측정한다. 초기 구현은 전체 1,879일에 걸쳐 재고 MDD를 "
+        "40.3%로 부풀렸다. 다만 `market`의 890일과 전략들의 880일이 어긋나는데, "
+        "이는 그 구간 안에서 **돌파 이벤트가 하루도 없었던 10일**이 전략 쪽에만 "
+        "빠지기 때문이다(전략은 그날 현금). 시장은 매매비용을 진입·청산 "
+        "**한 번씩만** 물리고, 전략은 매일 회전하므로 매일 문다.",
+        "",
         "**헤드라인은 고정명목누적·일평균수익·Sharpe다 — 누적/CAGR은 매일 전액",
         "재투자를 가정한 상한값이라 표 맨 끝에 참고로만 남긴다.**",
         "",
@@ -760,7 +813,10 @@ def write_report(df: pd.DataFrame, ab: pd.DataFrame, lk: pd.DataFrame,
              "model_prob50"])]
         if show.empty:
             show = dsr
-        lines += ["| 전략 | Sharpe | DSR(11개 시행 가정) |", "|---|---|---|"]
+        lines += ["**주의: 아래 Sharpe는 일간(비연율화) 값이다** — §5 표의 연율화 "
+                  "Sharpe(예: model_top5 6.53)와 √252배 차이가 난다(0.4114×√252=6.53).",
+                  "",
+                  "| 전략 | Sharpe(일간) | DSR(11개 시행 가정) |", "|---|---|---|"]
         for _, r in show.iterrows():
             lines.append(f"| {r['strategy']} | {r['sr_hat']:.2f} "
                         f"| {r['dsr_naive11']:.3f} |")
@@ -819,7 +875,7 @@ def write_report(df: pd.DataFrame, ab: pd.DataFrame, lk: pd.DataFrame,
         "",
         "종목선정 자체는 명백히 작동한다(승률 50.5% → 67.8%). 그러나 그 선정력은",
         "**마감강도라는 단일 지표에서 거의 전부 나오며**, 50개 피처와 LightGBM이",
-        "더하는 것은 상대 7%에 불과하다(2026 폴드 기준; 4폴드 평균으로는 15.4%,",
+        "더하는 것은 상대 6.2%에 불과하다(2026 폴드 기준; 4폴드 평균으로는 15.4%,",
         "아래 §6-1 참고).",
         "",
         "숫자가 커 보이는 이유도 함께 밝힌다: 수익률 분포의 왜도가 1.74이고,",
@@ -838,8 +894,9 @@ def write_report(df: pd.DataFrame, ab: pd.DataFrame, lk: pd.DataFrame,
         "2. **그런데도 검정 성능은 거의 안 바뀐다.** 4폴드 평균 AUC A=0.599 →",
         "   B=0.602. `close_strength` 단독 대비 마진도 15.4% → 14.6%로 거의",
         "   그대로다 — 최고로 튜닝된 모델이 단일 지표를 4폴드 평균 **약 15%**",
-        "   앞서지만, 폴드별로는 6.2%(2026, 가장 최근·가장 큰 폴드)부터",
-        "   23.9%(2025)까지 크게 갈린다. 이 변동 폭이 평균값보다 더 중요한",
+        "   앞서지만, 폴드별로는 **3.6%(2026, 가장 최근·가장 큰 폴드)부터",
+        "   23.8%(2025)까지** 크게 갈린다(조건 B 기준. 조건 A로는 6.2~23.9%).",
+        "   이 변동 폭이 평균값보다 더 중요한",
         "   정보다 — 가장 최근 폴드에서 모델의 우위가 가장 작다는 뜻이기",
         "   때문이다. 즉 이 결론은 잘못 튜닝된 모델의 아티팩트가 아니다 —",
         "   확인해봤고, 여전히 그대로다.",
@@ -876,7 +933,7 @@ def write_report(df: pd.DataFrame, ab: pd.DataFrame, lk: pd.DataFrame,
         "|---|---|---|---|---|",
         "| M0→M1 | +0.0646 | 4/4 | 상승 | 4폴드 부트스트랩 |",
         "| M1→M2 | +0.0230 | 4/4 | 상승 | [+0.0214, +0.0244] (4폴드) |",
-        "| M2→M3 | +0.0037 | 4/4 (미미) | **4/4 하락** | 4폴드 부트스트랩 |",
+        "| M2→M3 | +0.0035 | 4/4 (미미) | **4/4 하락** | 4폴드 부트스트랩 |",
         "| M3→M4 | +0.0080 | **3/4** | 혼재 | [−0.0001, +0.0139] (4폴드) |",
         "| M4prime→M5 | +0.0111 | — (n=869) | 정의불가(회귀 상수붕괴) "
         "| [−0.0074, +0.0299] (행 869개, 2,000회 부트스트랩) |",
@@ -931,6 +988,17 @@ def write_report(df: pd.DataFrame, ab: pd.DataFrame, lk: pd.DataFrame,
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     df = pd.read_parquet(config.DATASET_PATH)
+
+    global BENCH_2026
+    fresh = compute_bench_2026(df)
+    for k in ("perfect", "close_strength", "rsv_20"):   # random은 추첨평균이라 제외
+        gap = abs(fresh[k]["mean"] - BENCH_2026[k]["mean"])
+        if gap > 0.001:
+            print(f"  [warn] BENCH_2026['{k}'] 드리프트: 하드코딩 "
+                  f"{BENCH_2026[k]['mean']*100:.3f}% -> 재계산 "
+                  f"{fresh[k]['mean']*100:.3f}% ({gap*100:.3f}%p)")
+    BENCH_2026 = fresh
+
     R = config.RESULTS_DIR
     ab = pd.read_csv(R / "ablation.csv")
     lk = pd.read_csv(R / "leakage.csv")
