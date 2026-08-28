@@ -23,12 +23,60 @@ from sklearn.model_selection import KFold
 
 from surge_d1 import config, dataset, features_f4, validate
 
+# 모델 선택은 실측으로 정했다(outputs/model_comparison.csv, _model_compare.py).
+# 상한가를 이벤트에서 뺀 뒤(5,675건) 10개 모델을 같은 walk-forward 4폴드로
+# 비교한 결과:
+#   ExtraTrees   AUC 0.5542 / 상위20% 승률 47.7% / 수익 +0.436%   <- 채택
+#   RandomForest AUC 0.5503 / 48.9% / +0.418%
+#   앙상블        AUC 0.5412 / 46.0% / +0.278%
+#   XGBoost      AUC 0.5383 / 45.7% / +0.223%
+#   LightGBM     AUC 0.5359 / 46.0% / +0.289%
+#   CatBoost     AUC 0.5307 / 43.8% / +0.106%
+#   LGBMRanker   AUC 0.5301 / 44.6% / +0.241%   (순위학습도 이기지 못했다)
+#   Logistic     AUC 0.5167 / 41.3% / +0.086%
+#   (기저)                     40.7% / +0.091%
+#
+# LightGBM은 다른 프로젝트에서 물려받은 것이지 이 문제에서 고른 것이 아니었다.
+# 표본 5,675건에 신호가 약한 문제에서는 부스팅이 잡음을 외우기 쉽고, 분할
+# 지점까지 무작위로 고르는 ExtraTrees가 분산을 더 줄여 앞선다.
+# 다만 모델 간 차이(0.517~0.554)보다 **선별한다는 행위 자체**의 효과
+# (기저 40.7% -> 47.7%)가 훨씬 크다는 점이 이 표의 핵심이다.
+MODEL = "extratrees"          # "extratrees" | "randomforest" | "lightgbm"
+
+RF_PARAMS = dict(n_estimators=300, max_depth=10, min_samples_leaf=20,
+                 random_state=config.RANDOM_SEED, n_jobs=-1)
+ET_PARAMS = dict(n_estimators=400, max_depth=12, min_samples_leaf=20,
+                 random_state=config.RANDOM_SEED, n_jobs=-1)
+
 REG_PARAMS = dict(n_estimators=200, max_depth=3, learning_rate=0.01,
                   subsample=0.8, reg_alpha=1.0, reg_lambda=5.0,
                   random_state=config.RANDOM_SEED, verbose=-1, n_jobs=-1)
 CLF_PARAMS = dict(n_estimators=200, max_depth=5, learning_rate=0.05,
                   subsample=0.8, colsample_bytree=0.8,
                   random_state=config.RANDOM_SEED, verbose=-1, n_jobs=-1)
+
+
+def _make_clf():
+    """분류기 하나를 새로 만든다. 폴드마다 새 인스턴스여야 상태가 안 섞인다."""
+    if MODEL == "extratrees":
+        from sklearn.ensemble import ExtraTreesClassifier
+        return ExtraTreesClassifier(**ET_PARAMS)
+    if MODEL == "randomforest":
+        from sklearn.ensemble import RandomForestClassifier
+        return RandomForestClassifier(**RF_PARAMS)
+    from lightgbm import LGBMClassifier
+    return LGBMClassifier(**CLF_PARAMS)
+
+
+def _make_reg():
+    if MODEL == "extratrees":
+        from sklearn.ensemble import ExtraTreesRegressor
+        return ExtraTreesRegressor(**ET_PARAMS)
+    if MODEL == "randomforest":
+        from sklearn.ensemble import RandomForestRegressor
+        return RandomForestRegressor(**RF_PARAMS)
+    from lightgbm import LGBMRegressor
+    return LGBMRegressor(**REG_PARAMS)
 
 TEST_YEARS = [2023, 2024, 2025, 2026]
 
@@ -72,8 +120,6 @@ def _oof_prob(train_df: pd.DataFrame, feats: list[str],
     구간은 어떤 분할에서도 검증이 되지 않아 비며, 그 행들은 보정 적합에서
     빠진다(예측 자체에는 영향 없음).
     """
-    from lightgbm import LGBMClassifier
-
     from surge_d1.tuning import inner_time_splits
 
     X = train_df[feats].to_numpy(dtype=float)
@@ -82,7 +128,7 @@ def _oof_prob(train_df: pd.DataFrame, feats: list[str],
     for tr_idx, va_idx in inner_time_splits(train_df["date"], n_splits):
         if len(np.unique(y[tr_idx])) < 2:      # 한쪽 클래스뿐이면 적합 불가
             continue
-        c = LGBMClassifier(**CLF_PARAMS)
+        c = _make_clf()
         c.fit(X[tr_idx], y[tr_idx],
               sample_weight=None if w is None else w[tr_idx])
         oof[va_idx] = c.predict_proba(X[va_idx])[:, 1]
@@ -122,18 +168,16 @@ def _fit_predict_train_test(train_df: pd.DataFrame, test_df: pd.DataFrame,
     if banned:
         raise ValueError(f"fit_predict(): 금지된 컬럼이 피처에 섞였다: {banned}")
 
-    from lightgbm import LGBMClassifier, LGBMRegressor
-
     Xtr = train_df[feats].to_numpy(dtype=float)
     Xte = test_df[feats].to_numpy(dtype=float)
     w = train_df["weight"].to_numpy(dtype=float) if use_weight else None
 
-    reg = LGBMRegressor(**REG_PARAMS)
+    reg = _make_reg()
     reg.fit(Xtr, train_df[label_reg].to_numpy(dtype=float), sample_weight=w)
     pred_reg_tr = reg.predict(Xtr)
     pred_reg_te = reg.predict(Xte)
 
-    clf = LGBMClassifier(**CLF_PARAMS)
+    clf = _make_clf()
     ytr = train_df["y_cls"].to_numpy(dtype=int)
     clf.fit(Xtr, ytr, sample_weight=w)
     prob_raw_tr = clf.predict_proba(Xtr)[:, 1]

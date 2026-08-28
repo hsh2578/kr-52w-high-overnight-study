@@ -16,12 +16,31 @@ from surge_d1 import config
 
 
 def is_breakout(df: pd.DataFrame, i: int) -> bool:
-    """봉 i가 52주 신고가 돌파 이벤트인가.
+    """봉 i가 52주 신고가 돌파 이벤트인가 (시가총액 조건은 collect_events에서 본다).
 
-    조건 (스펙 §3.1): 252봉 종가 신고가 · 거래량이 **직전 50봉 평균**의 1.5배
-    · 당일 거래대금 100억 · i>=260 · 익일 존재
-    · 최근 HALT_LOOKBACK봉과 익일 봉에 거래정지 없음
+    스크리너 실전 조건을 그대로 옮겼다:
+
+      1. **52주 고가** = 구간 [i-265, i-15) 의 **고가(High)** 최댓값
+         창을 오늘에서 15봉 띄우는 이유: 바로 며칠 전 고점을 "52주 고가"로
+         삼으면 방금 만든 고점을 자기가 넘는 셈이라 돌파의 의미가 없다.
+      2. **돌파** = 종가 > 52주 고가 x 1.015
+         1.5% 버퍼를 두어 고가를 살짝 스치는 것을 돌파로 세지 않는다.
+      3. **갭 체크** = 직전 15봉 안에 이미 같은 수준을 넘은 적이 없을 것
+         이미 며칠 전에 돌파했다면 오늘은 '신규 돌파'가 아니다.
+      4. **상한가 배제** = 등락률 < 29.5%
+         상한가는 종가에 살 수 없다. 실측상 빼기 전에는 모델 픽의 96.2%가
+         상한가여서, 성과가 사실상 전부 체결 불가능한 거래에서 나왔다.
+      5. **추세** = 종가 > 150일선 이고 150일선이 20일 전보다 높을 것
+         하락 추세에서 나온 반등성 신고가를 걸러낸다.
+
+    구 정의(종가 252봉 신고가 + 거래량 1.5배 + 거래대금 100억) 대비 실측:
+    이벤트 23,654 -> 6,443건, 평균 수익 +0.4747% -> +0.5956% (t=11.84).
+    수가 줄어도 질이 오른다.
     """
+    P = config.HIGH_52W_PERIOD
+    G = config.HIGH_52W_GAP_DAYS
+    MA, SL = config.MA150_PERIOD, config.MA150_SLOPE_DAYS
+
     if i < config.MIN_BAR_INDEX or i + 1 >= len(df):
         return False
 
@@ -31,29 +50,49 @@ def is_breakout(df: pd.DataFrame, i: int) -> bool:
         if bool(df["halted"].iloc[lo:i + 2].any()):
             return False
 
-    c = float(df["Close"].iloc[i])
-    v = float(df["Volume"].iloc[i])
-    if not np.isfinite(c) or not np.isfinite(v) or c <= 0:
+    close = df["Close"].to_numpy(dtype=float)
+    high = df["High"].to_numpy(dtype=float)
+    c = close[i]
+    if not np.isfinite(c) or c <= 0:
         return False
 
-    # 가격제한 위반 봉 배제: 캐시에 섞인 오류 데이터(예: 037460 2026-05-15,
-    # 계산상 +32.05%이나 재료 CSV엔 +29.97%로 기록됨)를 이벤트로 보지 않는다.
-    prev_c = float(df["Close"].iloc[i - 1])
+    # 가격제한 위반 봉 배제: 캐시에 섞인 오류 데이터를 이벤트로 보지 않는다.
+    prev_c = close[i - 1]
     if np.isfinite(prev_c) and prev_c > 0:
         if abs(c / prev_c - 1.0) > config.MAX_DAILY_MOVE:
             return False
 
-    prior_high = float(df["Close"].iloc[i - config.HIGH_52W_PERIOD:i].max())
-    if not (c > prior_high):
+    # 1. 52주 고가 (고가 기준, 오늘에서 G봉 띄운 창)
+    de, ds = i - G, i - G - P
+    if ds < 0:
+        return False
+    win = high[ds:de]
+    if not np.isfinite(win).any():
+        return False
+    level = np.nanmax(win) * config.BREAKOUT_THRESHOLD
+
+    # 2. 돌파
+    if not (c > level):
         return False
 
-    # NaN(정지봉)을 건너뛴 평균
-    vol_avg = float(df["Volume"].iloc[i - 50:i].mean())
-    if not (np.isfinite(vol_avg) and vol_avg > 0
-            and v >= config.VOLUME_SURGE_MULT * vol_avg):
+    # 3. 갭 체크 — 직전 G봉 안에 이미 넘었으면 신규 돌파가 아니다
+    recent = close[max(0, i - G):i]
+    if np.any(recent > level):
         return False
 
-    return bool(c * v >= config.MIN_TRADING_VALUE)
+    # 4. 상한가 배제 — 종가 동시호가에서 매수 잔량만 쌓여 체결을 가정할 수 없다.
+    #    실측: 빼기 전에는 모델이 고른 픽의 **96.2%가 상한가**였고, 그 픽들이
+    #    성과의 거의 전부를 만들었다(상한가 픽 승률 75.5% vs 나머지 23.1%).
+    #    살 수 없는 거래의 수익을 성과로 보고하지 않기 위해 이벤트에서 제외한다.
+    if c / prev_c - 1.0 >= config.LIMIT_UP_PCT:
+        return False
+
+    # 5. 추세 — 150일선 위 + 우상향
+    ma_now = np.nanmean(close[i - MA + 1:i + 1])
+    ma_old = np.nanmean(close[i - MA - SL + 1:i - SL + 1])
+    if not (np.isfinite(ma_now) and np.isfinite(ma_old)):
+        return False
+    return bool(c > ma_now and ma_now > ma_old)
 
 
 def labels(df: pd.DataFrame, i: int, cost: float = config.COST,
@@ -152,6 +191,9 @@ def collect_events(ohlcv: dict[str, pd.DataFrame],
 
     exclude 에 든 코드는 건너뛴다(우선주 등). None 이면 필터를 걸지 않는다.
     """
+    from surge_d1 import sources
+
+    shares = sources.load_list_shares()
     rows = []
     for code, df in ohlcv.items():
         if exclude and code in exclude:
@@ -159,19 +201,26 @@ def collect_events(ohlcv: dict[str, pd.DataFrame],
         n = len(df)
         if n < config.MIN_BAR_INDEX + 2:
             continue
+        sh = shares.get(code)
+        if sh is None:          # 시총을 모르면 조건을 확인할 수 없다
+            continue
         c = df["Close"].to_numpy(dtype=float)
         v = df["Volume"].to_numpy(dtype=float)
-        tval = c * v
+        idx = df.index
         for i in range(config.MIN_BAR_INDEX, n - 1):
-            if tval[i] < config.MIN_TRADING_VALUE:
-                continue
             if not is_breakout(df, i):
+                continue
+            # 시가총액은 **시점 상장주식수**로 계산한다. 현재 주식수를 과거에
+            # 적용하면 유상증자·분할을 미리 아는 셈이 된다.
+            mcap = sources.market_cap_at(sh, idx[i], c[i])
+            if not np.isfinite(mcap) or mcap < config.MIN_MARKET_CAP:
                 continue
             lab = labels(df, i)
             if not np.isfinite(lab["y_raw"]):
                 continue
-            rows.append({"code": code, "date": df.index[i], "i": i,
-                         "close": c[i], **lab})
+            rows.append({"code": code, "date": idx[i], "i": i,
+                         "close": c[i], "market_cap": mcap,
+                         "tval_today": c[i] * v[i], **lab})
     out = pd.DataFrame(rows)
     if len(out):
         out = out.sort_values(["date", "code"]).reset_index(drop=True)

@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>52주 신고가 돌파의 익일 초과수익은 어디에서 오는가 — FIND-A TEAM Beta</title>
+<link rel="stylesheet" href="style.css?v=1787941339">
+<script src="deck-stage.js"></script>
+</head>
+<body>
+<deck-stage width="1600" height="900">
+<section data-label="표지" data-screen-label="표지" class="slide" id="a1">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start">
+    <div>
+      <div style="display:flex;align-items:center;gap:26px">
+        <div style="font-size:52px;font-weight:900;letter-spacing:-.03em">FIND-A</div>
+        <div style="width:1px;height:64px;background:var(--line)"></div>
+        <div style="font-size:16px;line-height:1.7;color:var(--muted)">
+          대학연합<br>금융데이터분석학회<br><b style="color:var(--ink)">파인드알파</b>
+        </div>
+      </div>
+      <div style="font-size:12px;letter-spacing:.42em;color:var(--dim);margin-top:10px">
+        FINANCIAL DATA ANALYSIS
+      </div>
+    </div>
+    <div style="text-align:right;font-size:30px;font-weight:700;line-height:1.5">
+      TEAM Beta.<br>황성혁<br>
+      <span style="font-size:22px;color:var(--muted);font-weight:500">26.09.</span>
+    </div>
+  </div>
+
+  <div style="position:absolute;left:88px;bottom:140px;right:88px">
+    <div class="eyebrow">52주 신고가 돌파 · 익일 수익 예측</div>
+    <div style="font-size:58px;font-weight:900;line-height:1.28;letter-spacing:-.025em">
+      52주 신고가 돌파의 익일 초과수익은<br>
+      <span class="accent">어디에서 오는가</span>
+    </div>
+    <div class="sub" style="margin-top:24px;font-size:20px">
+      2020.03 ~ 2026.08 · 국내 보통주 1,674종목 · 돌파 이벤트 6,265건 ·
+      walk-forward 4폴드 · 모델 10종 비교
+    </div>
+  </div>
+  <div class="slide-num">01</div>
+</section>
+
+<section data-label="목차" data-screen-label="목차" class="slide" id="a2">
+  <div style="display:flex;gap:90px;height:100%;align-items:center">
+    <div style="flex:none;width:300px">
+      <div style="font-size:76px;font-weight:900;letter-spacing:-.03em">목차</div>
+      <div style="font-size:19px;color:var(--dim);margin-top:6px">Contents</div>
+    </div>
+    <div style="width:1px;background:var(--line);align-self:stretch;margin:60px 0"></div>
+    <div style="flex:1">
+      <ol style="list-style:none;font-size:29px;font-weight:700;line-height:1">
+        <li style="margin-bottom:28px"><span style="color:var(--dim);margin-right:20px">1.</span>왜 이 연구를 시작했나</li>
+        <li style="margin-bottom:28px"><span style="color:var(--dim);margin-right:20px">2.</span>무엇을 이벤트로 정의했나</li>
+        <li style="margin-bottom:28px"><span style="color:var(--dim);margin-right:20px">3.</span>데이터와 변수 설계</li>
+        <li style="margin-bottom:28px"><span style="color:var(--dim);margin-right:20px">4.</span>모델 10종 비교와 변수 최적화</li>
+        <li style="margin-bottom:28px"><span style="color:var(--dim);margin-right:20px">5.</span><b class="accent">알파는 어디에서 왔나</b></li>
+        <li><span style="color:var(--dim);margin-right:20px">6.</span>결론 — 무엇을 찾지 못했나</li>
+      </ol>
+    </div>
+  </div>
+  <div class="slide-num">02</div>
+</section>
+
+<section data-label="왜 이 연구를 시작했나" data-screen-label="왜 이 연구를 시작했나" class="slide" id="a3">
+  <h1 class="title">왜 이 연구를 시작했나</h1>
+  <div class="rule"></div>
+
+  <div class="lead" style="margin-bottom:34px">
+    모의투자대회에서 <span class="accent">짧은 기간에 높은 수익률</span>을 내려면
+    변동성을 감수해야 한다. 문제는 <span class="accent">어떤 변동성을 고를 것인가</span>였다.
+  </div>
+
+  <div class="flow" style="margin-bottom:34px">
+    <div class="step">
+      <div class="n">01 &nbsp;제약</div>
+      <h4>짧은 기간 · 높은 목표</h4>
+      <p>대회 기간은 짧고 순위는 수익률로 갈린다.
+         저변동 전략으로는 상위권 자체가 불가능하다.</p>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step">
+      <div class="n">02 &nbsp;선택</div>
+      <h4>변동성 중 <b>손익비</b>가 좋은 것</h4>
+      <p>변동성이 크다고 다 같지 않다. 손실 대비 이익이
+         큰 사건을 골라야 기대값이 남는다.</p>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step hi">
+      <div class="n">03 &nbsp;대상</div>
+      <h4>52주 신고가 돌파</h4>
+      <p>신고가 위에는 매물대가 없어 상방이 열려 있고,
+         돌파 실패는 직전 저항선에서 손절이 가능하다.</p>
+    </div>
+  </div>
+
+  <div class="card hi">
+    <h3>연구 질문</h3>
+    <p style="font-size:22px;color:var(--ink);font-weight:700;line-height:1.5">
+      52주 신고가를 돌파한 종목 중 <span class="accent">내일 오를 것을 골라낼 수 있는가?</span>
+      — 그리고 그 초과수익은 <span class="accent">실제로 거래 가능한가?</span>
+    </p>
+  </div>
+  <div class="slide-num">03</div>
+</section>
+
+<section data-label="무엇을 돌파로 볼 것인가" data-screen-label="무엇을 돌파로 볼 것인가" class="slide" id="a4">
+  <h1 class="title">무엇을 "돌파"로 볼 것인가</h1>
+  <div class="rule" style="margin:22px 0 30px"></div>
+
+  <p class="sub" style="margin-bottom:20px;font-size:18px">
+    실전 스크리너에서 쓰던 조건을 그대로 옮겼다. 다섯 가지를 모두 만족해야 이벤트다.
+  </p>
+
+  <div class="grid g3" style="gap:18px;margin-bottom:22px">
+    <div class="card" style="padding:22px 24px">
+      <div class="badge b">조건 1</div>
+      <h3 style="margin-top:12px;font-size:19px">52주 고가 돌파</h3>
+      <p style="font-size:16px">종가 &gt; <b style="color:var(--ink)">[t−265, t−15] 구간
+        고가(High) 최댓값 × 1.015</b>. 창을 15봉 띄우는 이유 — 며칠 전 만든 고점을
+        자기가 넘는 건 돌파가 아니다.</p>
+    </div>
+    <div class="card" style="padding:22px 24px">
+      <div class="badge b">조건 2</div>
+      <h3 style="margin-top:12px;font-size:19px">신규 돌파일 것</h3>
+      <p style="font-size:16px">직전 <b style="color:var(--ink)">15봉 안에 같은 수준을
+        넘은 적이 없을 것.</b> 이미 며칠 전 돌파했다면 오늘은 새 신호가 아니다.</p>
+    </div>
+    <div class="card" style="padding:22px 24px">
+      <div class="badge b">조건 3</div>
+      <h3 style="margin-top:12px;font-size:19px">추세 안에 있을 것</h3>
+      <p style="font-size:16px">종가 &gt; <b style="color:var(--ink)">150일선</b>이고
+        150일선이 20일 전보다 높을 것. 하락 추세의 반등성 신고가를 걸러낸다.</p>
+    </div>
+  </div>
+
+  <div class="grid g2">
+    <div class="card">
+      <div class="badge b">조건 4</div>
+      <h3 style="margin-top:12px;font-size:19px">시가총액 1,000억 이상</h3>
+      <p style="font-size:17px;line-height:1.6">
+        <b style="color:var(--ink)">시점 상장주식수</b>로 계산한다 —
+        KRX에서 월별 스냅샷 80개월치를 받아
+        <code style="font-size:15px">시총(t) = 상장주식수(t 이전 최근) × 종가(t)</code>.
+        현재 주식수를 과거에 적용하면 유상증자·분할을 미리 아는 셈이 된다.
+      </p>
+    </div>
+    <div class="card hi">
+      <div class="badge b" style="background:rgba(178,58,72,.12);color:var(--bad)">조건 5</div>
+      <h3 style="margin-top:12px;font-size:19px">상한가 제외</h3>
+      <p style="font-size:17px;line-height:1.6">
+        등락률 29.5% 미만만 남긴다. <b style="color:var(--ink)">상한가는 종가 동시호가에서
+        매수 잔량만 쌓여 체결을 가정할 수 없다.</b>
+        <b class="accent">이 한 줄이 이 발표의 결론을 결정한다 — §5에서 다룬다.</b>
+      </p>
+    </div>
+  </div>
+  <div class="slide-num">04</div>
+</section>
+
+<section data-label="데이터" data-screen-label="데이터" class="slide" id="a5">
+  <h1 class="title">데이터</h1>
+  <div class="rule"></div>
+
+  <div class="stats" style="margin-bottom:34px">
+    <div class="stat">
+      <div class="v sm">2020.03 ~ 2026.08</div>
+      <div class="k">연구 기간 (6년 6개월)</div>
+    </div>
+    <div class="stat">
+      <div class="v sm">1,674<span style="font-size:26px">종목</span></div>
+      <div class="k">돌파를 한 번이라도 낸 보통주</div>
+    </div>
+    <div class="stat">
+      <div class="v sm accent">5,675<span style="font-size:26px">건</span></div>
+      <div class="k">최종 이벤트 (상한가 제외 후)</div>
+    </div>
+  </div>
+
+  <div class="grid g2" style="margin-bottom:24px">
+    <div class="card">
+      <h3>수집 경로</h3>
+      <ul class="bul" style="margin-top:6px">
+        <li><b>일봉 OHLCV</b> — FinanceDataReader. <b>수정주가</b>로 분할·증자에 의한
+            가짜 갭을 제거.</li>
+        <li><b>유니버스</b> — KRX Open API의 증권 종류 코드로 ETF·ETN·ELW·우선주·
+            리츠·외국주권을 제외.</li>
+        <li><b>시점 상장주식수</b> — KRX 월별 스냅샷 80개월 · 206,087행.</li>
+        <li><b>투자자 수급</b> — 키움 REST API 병렬 수집 (결측 17.4%).</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>정제에서 실제로 잡은 것</h3>
+      <ul class="bul" style="margin-top:6px">
+        <li><b>거래정지봉</b> — 원본이 O/H/L/V를 0으로 채운다. 그대로 두면 20봉 창에
+            하나만 섞여도 <span style="color:var(--ink)">RSV·ATR이 붕괴</span>한다.
+            전부 NaN 처리.</li>
+        <li><b>OHLC 불변식 위반</b> — High &lt; max(Open, Close)인 봉.
+            80.5%가 정확히 1원 차이인 <span style="color:var(--ink)">수정주가 반올림
+            아티팩트</span>였다.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card hi">
+    <p style="font-size:18px;line-height:1.6">
+      <b style="color:var(--ink)">예측 대상</b> —
+      돌파일 <b style="color:var(--ink)">종가에 매수 → 익일 시가에 매도</b>,
+      거래비용 0.21%를 <b style="color:var(--ink)">라벨에서 미리 차감</b>.
+      0.1% 오른 거래는 비용을 못 이겨 실제로는 손실이므로, 이 연구가 답하는 것은
+      <b style="color:var(--ink)">'오르는가'가 아니라 '비용을 제하고도 남는가'</b>이다.
+      <span class="tiny" style="display:block;margin-top:8px">
+        익일 상승 확률(gross) 45.9% vs 익일 순이익 확률(net) 41.2% — 이 4.7%p가 비용의 무게다.
+      </span>
+    </p>
+  </div>
+  <div class="slide-num">05</div>
+</section>
+
+<section data-label="변수 50개 중 11개" data-screen-label="변수 50개 중 11개" class="slide" id="a6">
+  <h1 class="title">변수 50개 — 그런데 <span class="accent">11개만</span> 신호가 있다</h1>
+  <div class="rule" style="margin:22px 0 28px"></div>
+
+  <div style="display:flex;gap:34px">
+    <div style="flex:1.1">
+      <p class="sub" style="margin-bottom:12px;font-size:17px">
+        일별 순위상관(IC)으로 잰 단변량 유효성. 날짜 안에서 재야 시장 전체의
+        등락이 섞이지 않는다.
+      </p>
+      <table>
+        <thead><tr><th>변수</th><th class="num">IC</th><th class="num">t</th></tr></thead>
+        <tbody>
+          <tr class="hl"><td><b>KUP</b> — 윗꼬리 비율</td>
+              <td class="num">−0.102</td><td class="num">−5.66</td></tr>
+          <tr><td>RSV_20 — 20일 범위 내 위치</td>
+              <td class="num">+0.081</td><td class="num">+4.55</td></tr>
+          <tr><td>gap_open — 당일 시가 갭</td>
+              <td class="num">+0.081</td><td class="num">+4.33</td></tr>
+          <tr><td>upper_shadow — 윗꼬리</td>
+              <td class="num">−0.051</td><td class="num">−2.72</td></tr>
+          <tr><td>KLOW — 아랫꼬리</td>
+              <td class="num">−0.050</td><td class="num">−2.69</td></tr>
+          <tr><td>avg_gap_20d — 평소 갭 성향</td>
+              <td class="num">+0.048</td><td class="num">+2.60</td></tr>
+          <tr class="dim"><td>… 이하 |t| &lt; 2</td><td class="num">—</td><td class="num">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="flex:.9;display:flex;flex-direction:column;gap:18px">
+      <div class="card hi">
+        <h3>가장 강한 신호는 <span class="accent">캔들 모양</span>이다</h3>
+        <p style="font-size:17px;line-height:1.6">
+          윗꼬리 없이 <b style="color:var(--ink)">고가 근처에서 마감할수록</b>
+          익일 시가가 좋다. 장 마감까지 매수세가 유지됐다는 뜻이고, 그 힘이
+          다음날 시초가로 이어진다.
+        </p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:19px">작동하지 않은 것 11개</h3>
+        <p style="font-size:16px;line-height:1.6">
+          <b style="color:var(--ink)">거래량 급증 · 시장수익률 · 요일 ·
+          외국인/기관/개인 순매수</b> 등은 |t| &lt; 0.5로 신호가 없었다.
+        </p>
+        <p style="font-size:16px;line-height:1.6;margin-top:10px">
+          특히 <b style="color:var(--ink)">수급 3종이 전부 죽어 있다</b> —
+          결측 17%를 감안해도 이 이벤트에서는 작동하지 않는다.
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">06</div>
+</section>
+
+<section data-label="모델 10종 비교" data-screen-label="모델 10종 비교" class="slide tight" id="a7">
+  <div class="eyebrow">방법론 검증 ①</div>
+  <h1 class="title">모델 10종을 <span class="accent">직접 비교했다</span></h1>
+  <div class="rule" style="margin:18px 0 24px"></div>
+
+  <div style="display:flex;gap:34px">
+    <div style="flex:1.15">
+      <p class="sub" style="margin-bottom:12px;font-size:17px">
+        같은 데이터 · 같은 walk-forward 4폴드 · 같은 표본가중치.
+        판단 기준은 AUC 하나가 아니라 <b style="color:var(--ink)">상위 20% 픽의
+        실제 승률</b> — 목적이 '고르는 것'이기 때문이다.
+      </p>
+      <table>
+        <thead><tr><th>모델</th><th class="num">AUC</th>
+                   <th class="num">상위20% 승률</th><th class="num">수익</th></tr></thead>
+        <tbody>
+          <tr class="hl"><td><b>ExtraTrees</b></td><td class="num">0.5542</td>
+              <td class="num">47.7%</td><td class="num">+0.436%</td></tr>
+          <tr><td>RandomForest</td><td class="num">0.5503</td>
+              <td class="num">48.9%</td><td class="num">+0.418%</td></tr>
+          <tr><td>앙상블 (RF+XGB+Cat)</td><td class="num">0.5412</td>
+              <td class="num">46.0%</td><td class="num">+0.278%</td></tr>
+          <tr><td>XGBoost</td><td class="num">0.5383</td>
+              <td class="num">45.7%</td><td class="num">+0.223%</td></tr>
+          <tr><td>LightGBM <span style="font-size:15px;color:var(--dim)">(물려받은 기본값)</span></td>
+              <td class="num">0.5359</td><td class="num">46.0%</td><td class="num">+0.289%</td></tr>
+          <tr><td>CatBoost</td><td class="num">0.5307</td>
+              <td class="num">43.8%</td><td class="num">+0.106%</td></tr>
+          <tr><td>LGBMRanker <span style="font-size:15px;color:var(--dim)">(순위학습)</span></td>
+              <td class="num">0.5301</td><td class="num">44.6%</td><td class="num">+0.241%</td></tr>
+          <tr><td>LogisticRegression</td><td class="num">0.5167</td>
+              <td class="num">41.3%</td><td class="num">+0.086%</td></tr>
+          <tr class="dim"><td>(기저 · 전체 검정)</td><td class="num">—</td>
+              <td class="num">40.7%</td><td class="num">+0.091%</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="flex:.85;display:flex;flex-direction:column;gap:16px">
+      <div class="card hi">
+        <h3 style="font-size:19px">LightGBM은 최선이 아니었다</h3>
+        <p style="font-size:16px;line-height:1.55">
+          다른 프로젝트에서 물려받은 기본값이었지 이 문제에서 고른 것이 아니었다.
+          표본 5,675건에 신호가 약한 문제에서는 <b style="color:var(--ink)">부스팅이
+          잡음을 외우기 쉽고</b>, 분할 지점까지 무작위로 고르는 ExtraTrees가
+          분산을 더 줄인다.
+        </p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:19px">순위학습도 이기지 못했다</h3>
+        <p style="font-size:16px;line-height:1.55">
+          LambdaRank는 목적함수가 <b style="color:var(--ink)">"그날 안에서 순위"</b>로
+          우리 목적과 정확히 맞는데도 AUC 0.530에 그쳤다.
+          <b style="color:var(--ink)">이론적 적합성이 실측 성능을 보장하지 않는다.</b>
+        </p>
+      </div>
+      <div class="card" style="border-color:var(--accent)">
+        <p style="font-size:17px;line-height:1.55;color:var(--ink);font-weight:700">
+          모델 간 차이(0.517~0.554)보다 <span class="accent">선별한다는 행위 자체</span>의
+          효과(40.7% → 47.7%)가 훨씬 크다.
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">07</div>
+</section>
+
+<section data-label="변수 최적화와 PCA" data-screen-label="변수 최적화와 PCA" class="slide" id="a8">
+  <div class="eyebrow">방법론 검증 ②</div>
+  <h1 class="title">변수를 줄이면 <span class="bad">나빠진다</span> — PCA도 마찬가지</h1>
+  <div class="rule" style="margin:18px 0 26px"></div>
+
+  <div class="grid g2" style="gap:28px;margin-bottom:22px">
+    <div class="card">
+      <h3>피처 수 최적화</h3>
+      <p style="font-size:16px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+        단변량 |t| 상위 k개만 사용. <b style="color:var(--ink)">선택은 학습 폴드
+        안에서만</b> 한다 — 전체로 고르면 검정을 보고 고르는 셈이다.
+      </p>
+      <table style="margin-top:6px">
+        <thead><tr><th>사용 변수</th><th class="num">AUC</th><th class="num">상위20% 승률</th></tr></thead>
+        <tbody>
+          <tr><td>상위 10개</td><td class="num">0.5239</td><td class="num">42.7%</td></tr>
+          <tr><td>상위 20개</td><td class="num">0.5283</td><td class="num">43.4%</td></tr>
+          <tr><td>상위 30개</td><td class="num">0.5357</td><td class="num">44.8%</td></tr>
+          <tr class="hl"><td><b>전체 50개</b></td><td class="num">0.5542</td><td class="num">47.7%</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>PCA 차원 축소</h3>
+      <p style="font-size:16px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+        대체·표준화·PCA 모두 <b style="color:var(--ink)">학습 폴드에서만</b> 적합.
+      </p>
+      <table style="margin-top:6px">
+        <thead><tr><th>방식</th><th class="num">AUC</th><th class="num">상위20% 승률</th></tr></thead>
+        <tbody>
+          <tr><td>PCA 5차원</td><td class="num">0.5127</td><td class="num">40.1%</td></tr>
+          <tr><td>PCA 10차원</td><td class="num">0.5212</td><td class="num">43.4%</td></tr>
+          <tr><td>PCA 20차원</td><td class="num">0.5221</td><td class="num">42.4%</td></tr>
+          <tr class="hl"><td><b>축소 없음 (50개)</b></td><td class="num">0.5542</td><td class="num">47.7%</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card hi">
+    <h3>왜 이런 결과가 나오나</h3>
+    <p style="font-size:18px;line-height:1.6">
+      <b style="color:var(--ink)">단변량 신호가 없어도 조합에서 기여하는 변수가 있다.</b>
+      |t| &lt; 2인 39개를 버리면 트리가 배우던 상호작용이 함께 사라진다.
+      <b style="color:var(--ink)">PCA는 축을 회전시켜</b> 트리의 축 정렬 분할
+      구조를 흩뜨린다 — "거래대금 500억 이상" 같은 임계값을 PC1·PC2로는 표현할 수 없다.
+    </p>
+  </div>
+  <div class="slide-num">08</div>
+</section>
+
+<section data-label="검증 설계" data-screen-label="검증 설계" class="slide" id="a9">
+  <div class="eyebrow">방법론 검증 ③</div>
+  <h1 class="title">검증 설계 — 셔플 K-fold를 쓰지 않은 이유</h1>
+  <div class="rule" style="margin:18px 0 28px"></div>
+
+  <div class="grid g2" style="margin-bottom:26px">
+    <div class="card">
+      <h3>walk-forward + 임베고</h3>
+      <p style="font-size:18px;line-height:1.7">
+        2023 · 2024 · 2025 · 2026을 각각 검정 연도로 두고
+        <b style="color:var(--ink)">그 이전 데이터로만</b> 학습하는 4개 폴드.
+        학습 끝과 검정 시작 사이에 <b style="color:var(--ink)">5거래일 임베고</b>를
+        둬 라벨 기간이 겹치지 않게 한다.
+      </p>
+      <p style="font-size:18px;line-height:1.7;margin-top:14px">
+        하루에 이벤트가 몰리면 그날이 과대대표되므로
+        <b style="color:var(--ink)">1/(그날 이벤트 수)</b>로 표본 가중치를 준다.
+      </p>
+    </div>
+    <div class="card hi">
+      <h3>셔플 K-fold는 성능을 만들어낸다</h3>
+      <table style="margin-top:10px">
+        <thead><tr><th>검증 방식</th><th class="num">AUC</th><th class="num">IC</th></tr></thead>
+        <tbody>
+          <tr><td>셔플 K-fold</td><td class="num">0.5377</td><td class="num">−0.002</td></tr>
+          <tr class="hl"><td>walk-forward</td><td class="num">0.5314</td><td class="num">+0.054</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:17px;margin-top:14px;line-height:1.6">
+        무작위 분할이 AUC를 <b class="bad">+0.006</b> 부풀린다.
+        크지는 않지만 <b style="color:var(--ink)">방향이 예상과 일치</b>하며,
+        신호 자체가 약한 이 문제에서는 그 정도도 결론을 뒤집기 충분하다.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>확률 보정에서 잡은 버그</h3>
+    <p style="font-size:18px;line-height:1.6">
+      확률 보정(isotonic)을 <b style="color:var(--ink)">모델이 이미 외운 학습 예측</b>
+      위에 적합하고 있었다. 학습과 검정의 성능 격차 위에서 보정하면
+      <b class="bad">과신이 교정되는 대신 증폭</b>된다 — 예측 CLI가 "확률 89%"를
+      찍었는데 실제 빈도는 60%대였고, Brier가 "무조건 기저율"이라는 상수 예측보다
+      나빴다. 학습 구간 <b style="color:var(--ink)">안에서</b> out-of-fold 예측을 만들어
+      거기에 보정을 맞추는 것으로 고쳤다.
+    </p>
+  </div>
+  <div class="slide-num">09</div>
+</section>
+
+<section data-label="알파는 어디에서 왔나" data-screen-label="알파는 어디에서 왔나" class="slide" id="a10">
+  <div class="eyebrow">결과 ① · 이 연구의 핵심 발견</div>
+  <h1 class="title">알파의 <span class="accent">90%</span>는 이벤트의
+    <span class="accent">9.4%</span>에서 나왔다</h1>
+  <div class="rule" style="margin:18px 0 26px"></div>
+
+  <div style="display:flex;gap:34px;margin-bottom:22px">
+    <div style="flex:1.15">
+      <p class="sub" style="margin-bottom:12px;font-size:17px">
+        상한가를 <b style="color:var(--ink)">빼기 전</b> 6,265건을 상한가 여부로 쪼갰다.
+      </p>
+      <table>
+        <thead><tr><th>구분</th><th class="num">n</th><th class="num">비중</th>
+                   <th class="num">승률</th><th class="num">평균</th><th class="num">t</th></tr></thead>
+        <tbody>
+          <tr class="hl"><td><b>상한가</b></td><td class="num">590</td>
+              <td class="num">9.4%</td><td class="num">76.1%</td>
+              <td class="num">+5.772%</td><td class="num">+16.40</td></tr>
+          <tr><td>상한가 아님</td><td class="num">5,675</td>
+              <td class="num">90.6%</td><td class="num">41.2%</td>
+              <td class="num">+0.066%</td><td class="num bad">+1.85</td></tr>
+          <tr class="dim"><td>전체</td><td class="num">6,265</td>
+              <td class="num">100%</td><td class="num">44.5%</td>
+              <td class="num">+0.603%</td><td class="num">+11.89</td></tr>
+        </tbody>
+      </table>
+
+      <div class="card hi" style="margin-top:22px">
+        <h3>산술로 확인된다</h3>
+        <p style="font-size:18px;line-height:1.6">
+          0.094 × 5.772% + 0.906 × 0.066% = <b style="color:var(--ink)">0.603%</b><br>
+          <span style="font-size:17px">앞의 항이 <b style="color:var(--ink)">0.543%p</b>,
+          뒤의 항이 <b style="color:var(--ink)">0.060%p</b> —
+          <b class="accent">전체 알파의 90%가 상한가에서 나온다.</b></span>
+        </p>
+      </div>
+    </div>
+
+    <div style="flex:.85;display:flex;flex-direction:column;gap:18px">
+      <div class="card" style="text-align:center;padding:30px 24px">
+        <div style="font-size:16px;color:var(--dim)">t값이 어떻게 무너지나</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:22px;margin:20px 0 8px">
+          <div>
+            <div style="font-size:46px;font-weight:900;color:var(--ink)">11.89</div>
+            <div style="font-size:15px;color:var(--dim);margin-top:4px">전체</div>
+          </div>
+          <div style="font-size:30px;color:var(--bad)">→</div>
+          <div>
+            <div style="font-size:54px;font-weight:900;color:var(--bad)">1.85</div>
+            <div style="font-size:15px;color:var(--muted);margin-top:4px">상한가 제외</div>
+          </div>
+        </div>
+        <div class="badge r" style="margin-top:8px">유의성 소멸</div>
+      </div>
+
+      <div class="card" style="border-color:var(--bad)">
+        <h3 style="font-size:19px">그리고 상한가는 살 수 없다</h3>
+        <p style="font-size:17px;line-height:1.55">
+          가격제한폭에 닿으면 <b style="color:var(--ink)">매수 잔량만 쌓이고
+          매도가 말라붙는다.</b> 그날 거래가 많았다는 것과, 종가 동시호가에
+          내 주문이 체결된다는 것은 전혀 다른 문제다.
+        </p>
+        <p style="font-size:17px;line-height:1.55;margin-top:10px">
+          <b class="accent">그래서 이벤트 정의에서 아예 제외했다.</b>
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">10</div>
+</section>
+
+<section data-label="상한가를 뺀 세계" data-screen-label="상한가를 뺀 세계" class="slide tight" id="a11">
+  <div class="eyebrow">결과 ② · 상한가를 뺀 세계</div>
+  <h1 class="title">모델은 <span class="accent">고를 수 있다</span> —
+    그러나 <span class="bad">유의하지 않다</span></h1>
+  <div class="rule" style="margin:18px 0 24px"></div>
+
+  <div style="display:flex;gap:34px;margin-bottom:20px">
+    <div style="flex:1.15">
+      <p class="sub" style="margin-bottom:12px;font-size:17px">
+        상한가 제외 5,675건 · 검정 3,965건 / 795거래일 · ExtraTrees
+      </p>
+      <table>
+        <thead><tr><th>선별 방식</th><th class="num">픽</th>
+                   <th class="num">승률</th><th class="num">평균수익</th></tr></thead>
+        <tbody>
+          <tr class="dim"><td>그냥 돌파 (전부 매수)</td><td class="num">3,965</td>
+              <td class="num">40.7%</td><td class="num">+0.091%</td></tr>
+          <tr><td>ML 확률 ≥ 0.40</td><td class="num">1,390</td>
+              <td class="num">43.4%</td><td class="num">+0.153%</td></tr>
+          <tr class="hl"><td>ML 확률 ≥ 0.45</td><td class="num">117</td>
+              <td class="num">46.2%</td><td class="num">+0.424%</td></tr>
+          <tr><td>ML 상위 3 <span style="font-size:15px;color:var(--dim)">(매일)</span></td>
+              <td class="num">2,012</td><td class="num">40.8%</td><td class="num">+0.032%</td></tr>
+          <tr><td>룰: 마감강도 상위 5</td><td class="num">2,765</td>
+              <td class="num">39.5%</td><td class="num">+0.004%</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:17px;margin-top:14px;line-height:1.55">
+        <b style="color:var(--ink)">매일 N개를 반드시 사야 하는 방식은 기저와
+        차이가 없다.</b> 상위 3·상위 5 모두 40% 근처로, 아무거나 사는 것과 같다.
+      </p>
+    </div>
+
+    <div style="flex:.85;display:flex;flex-direction:column;gap:16px">
+      <div class="card" style="border-color:var(--bad)">
+        <h3 style="font-size:19px">유의성 검정</h3>
+        <table style="margin-top:6px">
+          <tbody>
+            <tr><td>확률 ≥ 0.40</td><td class="num">Welch t = +1.02</td>
+                <td class="num bad">p = 0.31</td></tr>
+            <tr><td>확률 ≥ 0.45</td><td class="num">Welch t = +1.12</td>
+                <td class="num bad">p = 0.27</td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:16px;margin-top:10px;line-height:1.5">
+          <b style="color:var(--ink)">둘 다 유의하지 않다.</b>
+        </p>
+      </div>
+
+      <div class="card">
+        <h3 style="font-size:19px">연도별로도 불안정하다</h3>
+        <table style="margin-top:6px">
+          <thead><tr><th>연도</th><th class="num">픽</th><th class="num">승률</th>
+                     <th class="num">기저</th></tr></thead>
+          <tbody>
+            <tr><td>2023</td><td class="num">12</td>
+                <td class="num bad">33.3%</td><td class="num">40.6%</td></tr>
+            <tr><td>2024</td><td class="num">7</td>
+                <td class="num">42.9%</td><td class="num">35.9%</td></tr>
+            <tr class="dim"><td>2025</td><td class="num">3</td>
+                <td class="num">—</td><td class="num">—</td></tr>
+            <tr class="hl"><td>2026</td><td class="num">95</td>
+                <td class="num">47.4%</td><td class="num">44.5%</td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:16px;margin-top:10px;line-height:1.5">
+          117픽 중 <b style="color:var(--ink)">95개가 2026년</b>이다.
+          사실상 한 해가 결과를 만들고 있다.
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">11</div>
+</section>
+
+<section data-label="결론" data-screen-label="결론" class="slide" id="a12">
+  <h1 class="title">결론 — 무엇을 찾았고, 무엇을 찾지 못했나</h1>
+  <div class="rule" style="margin:22px 0 28px"></div>
+
+  <div class="grid g3" style="margin-bottom:28px">
+    <div class="card">
+      <div class="badge b">찾은 것 ①</div>
+      <h3 style="margin-top:12px;font-size:19px">알파의 출처</h3>
+      <p style="font-size:16px;line-height:1.6">
+        52주 신고가 돌파의 익일 초과수익은 <b style="color:var(--ink)">이벤트의
+        9.4%인 상한가</b>에서 90%가 나온다. 상한가를 빼면 t가
+        <b style="color:var(--ink)">11.89 → 1.85</b>로 무너진다.
+      </p>
+    </div>
+    <div class="card">
+      <div class="badge b">찾은 것 ②</div>
+      <h3 style="margin-top:12px;font-size:19px">방법론의 함정 셋</h3>
+      <p style="font-size:16px;line-height:1.6">
+        학습예측 위의 확률 보정은 <b style="color:var(--ink)">과신을 증폭</b>한다.
+        셔플 K-fold는 AUC를 <b style="color:var(--ink)">+0.017 부풀린다</b>.
+        변수를 줄이거나 PCA로 압축하면 <b style="color:var(--ink)">나빠진다</b>.
+      </p>
+    </div>
+    <div class="card">
+      <div class="badge b">찾은 것 ③</div>
+      <h3 style="margin-top:12px;font-size:19px">모델보다 선별</h3>
+      <p style="font-size:16px;line-height:1.6">
+        10종을 비교했을 때 모델 간 차이는 AUC 0.517~0.554에 불과했다.
+        <b style="color:var(--ink)">이론적으로 딱 맞는 순위학습조차 이기지
+        못했다.</b>
+      </p>
+    </div>
+  </div>
+
+  <div class="card hi" style="padding:32px 38px">
+    <div class="eyebrow" style="margin-bottom:14px">찾지 못한 것</div>
+    <div style="font-size:29px;font-weight:900;line-height:1.5;margin-bottom:18px">
+      상한가를 뺀 세계에서 <span class="bad">거래 가능한 익일 초과수익은
+      찾지 못했다.</span>
+    </div>
+    <div class="sub" style="font-size:19px;line-height:1.65">
+      모델이 고른 상위 집단은 승률 46.2%로 기저 40.7%를 앞서지만
+      <b style="color:var(--ink)">p = 0.27로 유의하지 않고</b>, 795거래일 동안 픽이
+      <b style="color:var(--ink)">117건</b>뿐이며 그중 95건이 한 해에 몰려 있다.
+      <br><br>
+      <b style="color:var(--ink)">이것은 실패가 아니라 결과다.</b>
+      "52주 신고가 돌파에 익일 알파가 있다"는 통념은 사실이지만,
+      <b class="accent">그 알파는 살 수 없는 곳에 있다.</b>
+      이 구분을 하지 않으면 백테스트는 좋아지고 전략은 나빠진다.
+    </div>
+  </div>
+  <div class="slide-num">12</div>
+</section></deck-stage>
+</body>
+</html>

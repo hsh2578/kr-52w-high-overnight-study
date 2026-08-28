@@ -1,0 +1,232 @@
+<!-- A안 덱 · 슬라이드 6~12 -->
+
+<!-- ============ 6. 변수 설계 ============ -->
+<section class="slide" id="a6">
+  <h1 class="title">변수 50개 — 그런데 <span class="accent">11개만</span> 신호가 있다</h1>
+  <div class="rule" style="margin:22px 0 28px"></div>
+
+  <div style="display:flex;gap:34px">
+    <div style="flex:1.1">
+      <p class="sub" style="margin-bottom:12px;font-size:17px">
+        일별 순위상관(IC)으로 잰 단변량 유효성. 날짜 안에서 재야 시장 전체의
+        등락이 섞이지 않는다.
+      </p>
+      <table>
+        <thead><tr><th>변수</th><th class="num">IC</th><th class="num">t</th></tr></thead>
+        <tbody>
+          <tr class="hl"><td><b>KUP</b> — 윗꼬리 비율</td>
+              <td class="num">−0.102</td><td class="num">−5.66</td></tr>
+          <tr><td>RSV_20 — 20일 범위 내 위치</td>
+              <td class="num">+0.081</td><td class="num">+4.55</td></tr>
+          <tr><td>gap_open — 당일 시가 갭</td>
+              <td class="num">+0.081</td><td class="num">+4.33</td></tr>
+          <tr><td>upper_shadow — 윗꼬리</td>
+              <td class="num">−0.051</td><td class="num">−2.72</td></tr>
+          <tr><td>KLOW — 아랫꼬리</td>
+              <td class="num">−0.050</td><td class="num">−2.69</td></tr>
+          <tr><td>avg_gap_20d — 평소 갭 성향</td>
+              <td class="num">+0.048</td><td class="num">+2.60</td></tr>
+          <tr class="dim"><td>… 이하 |t| &lt; 2</td><td class="num">—</td><td class="num">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="flex:.9;display:flex;flex-direction:column;gap:18px">
+      <div class="card hi">
+        <h3>가장 강한 신호는 <span class="accent">캔들 모양</span>이다</h3>
+        <p style="font-size:17px;line-height:1.6">
+          윗꼬리 없이 <b style="color:var(--ink)">고가 근처에서 마감할수록</b>
+          익일 시가가 좋다. 장 마감까지 매수세가 유지됐다는 뜻이고, 그 힘이
+          다음날 시초가로 이어진다.
+        </p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:19px">작동하지 않은 것 11개</h3>
+        <p style="font-size:16px;line-height:1.6">
+          <b style="color:var(--ink)">거래량 급증 · 시장수익률 · 요일 ·
+          외국인/기관/개인 순매수</b> 등은 |t| &lt; 0.5로 신호가 없었다.
+        </p>
+        <p style="font-size:16px;line-height:1.6;margin-top:10px">
+          특히 <b style="color:var(--ink)">수급 3종이 전부 죽어 있다</b> —
+          결측 17%를 감안해도 이 이벤트에서는 작동하지 않는다.
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">06</div>
+</section>
+
+
+<!-- ============ 7. 모델 비교 ============ -->
+<section class="slide tight" id="a7">
+  <div class="eyebrow">방법론 검증 ①</div>
+  <h1 class="title">모델 10종을 <span class="accent">직접 비교했다</span></h1>
+  <div class="rule" style="margin:18px 0 24px"></div>
+
+  <div style="display:flex;gap:34px">
+    <div style="flex:1.15">
+      <p class="sub" style="margin-bottom:12px;font-size:17px">
+        같은 데이터 · 같은 walk-forward 4폴드 · 같은 표본가중치.
+        판단 기준은 AUC 하나가 아니라 <b style="color:var(--ink)">상위 20% 픽의
+        실제 승률</b> — 목적이 '고르는 것'이기 때문이다.
+      </p>
+      <table>
+        <thead><tr><th>모델</th><th class="num">AUC</th>
+                   <th class="num">상위20% 승률</th><th class="num">수익</th></tr></thead>
+        <tbody>
+          <tr class="hl"><td><b>ExtraTrees</b></td><td class="num">0.5542</td>
+              <td class="num">47.7%</td><td class="num">+0.436%</td></tr>
+          <tr><td>RandomForest</td><td class="num">0.5503</td>
+              <td class="num">48.9%</td><td class="num">+0.418%</td></tr>
+          <tr><td>앙상블 (RF+XGB+Cat)</td><td class="num">0.5412</td>
+              <td class="num">46.0%</td><td class="num">+0.278%</td></tr>
+          <tr><td>XGBoost</td><td class="num">0.5383</td>
+              <td class="num">45.7%</td><td class="num">+0.223%</td></tr>
+          <tr><td>LightGBM <span style="font-size:15px;color:var(--dim)">(물려받은 기본값)</span></td>
+              <td class="num">0.5359</td><td class="num">46.0%</td><td class="num">+0.289%</td></tr>
+          <tr><td>CatBoost</td><td class="num">0.5307</td>
+              <td class="num">43.8%</td><td class="num">+0.106%</td></tr>
+          <tr><td>LGBMRanker <span style="font-size:15px;color:var(--dim)">(순위학습)</span></td>
+              <td class="num">0.5301</td><td class="num">44.6%</td><td class="num">+0.241%</td></tr>
+          <tr><td>LogisticRegression</td><td class="num">0.5167</td>
+              <td class="num">41.3%</td><td class="num">+0.086%</td></tr>
+          <tr class="dim"><td>(기저 · 전체 검정)</td><td class="num">—</td>
+              <td class="num">40.7%</td><td class="num">+0.091%</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="flex:.85;display:flex;flex-direction:column;gap:16px">
+      <div class="card hi">
+        <h3 style="font-size:19px">LightGBM은 최선이 아니었다</h3>
+        <p style="font-size:16px;line-height:1.55">
+          다른 프로젝트에서 물려받은 기본값이었지 이 문제에서 고른 것이 아니었다.
+          표본 5,675건에 신호가 약한 문제에서는 <b style="color:var(--ink)">부스팅이
+          잡음을 외우기 쉽고</b>, 분할 지점까지 무작위로 고르는 ExtraTrees가
+          분산을 더 줄인다.
+        </p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:19px">순위학습도 이기지 못했다</h3>
+        <p style="font-size:16px;line-height:1.55">
+          LambdaRank는 목적함수가 <b style="color:var(--ink)">"그날 안에서 순위"</b>로
+          우리 목적과 정확히 맞는데도 AUC 0.530에 그쳤다.
+          <b style="color:var(--ink)">이론적 적합성이 실측 성능을 보장하지 않는다.</b>
+        </p>
+      </div>
+      <div class="card" style="border-color:var(--accent)">
+        <p style="font-size:17px;line-height:1.55;color:var(--ink);font-weight:700">
+          모델 간 차이(0.517~0.554)보다 <span class="accent">선별한다는 행위 자체</span>의
+          효과(40.7% → 47.7%)가 훨씬 크다.
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">07</div>
+</section>
+
+
+<!-- ============ 8. 변수 최적화 · PCA ============ -->
+<section class="slide" id="a8">
+  <div class="eyebrow">방법론 검증 ②</div>
+  <h1 class="title">변수를 줄이면 <span class="bad">나빠진다</span> — PCA도 마찬가지</h1>
+  <div class="rule" style="margin:18px 0 26px"></div>
+
+  <div class="grid g2" style="gap:28px;margin-bottom:22px">
+    <div class="card">
+      <h3>피처 수 최적화</h3>
+      <p style="font-size:16px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+        단변량 |t| 상위 k개만 사용. <b style="color:var(--ink)">선택은 학습 폴드
+        안에서만</b> 한다 — 전체로 고르면 검정을 보고 고르는 셈이다.
+      </p>
+      <table style="margin-top:6px">
+        <thead><tr><th>사용 변수</th><th class="num">AUC</th><th class="num">상위20% 승률</th></tr></thead>
+        <tbody>
+          <tr><td>상위 10개</td><td class="num">0.5239</td><td class="num">42.7%</td></tr>
+          <tr><td>상위 20개</td><td class="num">0.5283</td><td class="num">43.4%</td></tr>
+          <tr><td>상위 30개</td><td class="num">0.5357</td><td class="num">44.8%</td></tr>
+          <tr class="hl"><td><b>전체 50개</b></td><td class="num">0.5542</td><td class="num">47.7%</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>PCA 차원 축소</h3>
+      <p style="font-size:16px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+        대체·표준화·PCA 모두 <b style="color:var(--ink)">학습 폴드에서만</b> 적합.
+      </p>
+      <table style="margin-top:6px">
+        <thead><tr><th>방식</th><th class="num">AUC</th><th class="num">상위20% 승률</th></tr></thead>
+        <tbody>
+          <tr><td>PCA 5차원</td><td class="num">0.5127</td><td class="num">40.1%</td></tr>
+          <tr><td>PCA 10차원</td><td class="num">0.5212</td><td class="num">43.4%</td></tr>
+          <tr><td>PCA 20차원</td><td class="num">0.5221</td><td class="num">42.4%</td></tr>
+          <tr class="hl"><td><b>축소 없음 (50개)</b></td><td class="num">0.5542</td><td class="num">47.7%</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card hi">
+    <h3>왜 이런 결과가 나오나</h3>
+    <p style="font-size:18px;line-height:1.6">
+      <b style="color:var(--ink)">단변량 신호가 없어도 조합에서 기여하는 변수가 있다.</b>
+      |t| &lt; 2인 39개를 버리면 트리가 배우던 상호작용이 함께 사라진다.
+      <b style="color:var(--ink)">PCA는 축을 회전시켜</b> 트리의 축 정렬 분할
+      구조를 흩뜨린다 — "거래대금 500억 이상" 같은 임계값을 PC1·PC2로는 표현할 수 없다.
+    </p>
+  </div>
+  <div class="slide-num">08</div>
+</section>
+
+
+<!-- ============ 9. 검증 설계 ============ -->
+<section class="slide" id="a9">
+  <div class="eyebrow">방법론 검증 ③</div>
+  <h1 class="title">검증 설계 — 셔플 K-fold를 쓰지 않은 이유</h1>
+  <div class="rule" style="margin:18px 0 28px"></div>
+
+  <div class="grid g2" style="margin-bottom:26px">
+    <div class="card">
+      <h3>walk-forward + 임베고</h3>
+      <p style="font-size:18px;line-height:1.7">
+        2023 · 2024 · 2025 · 2026을 각각 검정 연도로 두고
+        <b style="color:var(--ink)">그 이전 데이터로만</b> 학습하는 4개 폴드.
+        학습 끝과 검정 시작 사이에 <b style="color:var(--ink)">5거래일 임베고</b>를
+        둬 라벨 기간이 겹치지 않게 한다.
+      </p>
+      <p style="font-size:18px;line-height:1.7;margin-top:14px">
+        하루에 이벤트가 몰리면 그날이 과대대표되므로
+        <b style="color:var(--ink)">1/(그날 이벤트 수)</b>로 표본 가중치를 준다.
+      </p>
+    </div>
+    <div class="card hi">
+      <h3>셔플 K-fold는 성능을 만들어낸다</h3>
+      <table style="margin-top:10px">
+        <thead><tr><th>검증 방식</th><th class="num">AUC</th><th class="num">IC</th></tr></thead>
+        <tbody>
+          <tr><td>셔플 K-fold</td><td class="num">0.5377</td><td class="num">−0.002</td></tr>
+          <tr class="hl"><td>walk-forward</td><td class="num">0.5314</td><td class="num">+0.054</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:17px;margin-top:14px;line-height:1.6">
+        무작위 분할이 AUC를 <b class="bad">+0.006</b> 부풀린다.
+        크지는 않지만 <b style="color:var(--ink)">방향이 예상과 일치</b>하며,
+        신호 자체가 약한 이 문제에서는 그 정도도 결론을 뒤집기 충분하다.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>확률 보정에서 잡은 버그</h3>
+    <p style="font-size:18px;line-height:1.6">
+      확률 보정(isotonic)을 <b style="color:var(--ink)">모델이 이미 외운 학습 예측</b>
+      위에 적합하고 있었다. 학습과 검정의 성능 격차 위에서 보정하면
+      <b class="bad">과신이 교정되는 대신 증폭</b>된다 — 예측 CLI가 "확률 89%"를
+      찍었는데 실제 빈도는 60%대였고, Brier가 "무조건 기저율"이라는 상수 예측보다
+      나빴다. 학습 구간 <b style="color:var(--ink)">안에서</b> out-of-fold 예측을 만들어
+      거기에 보정을 맞추는 것으로 고쳤다.
+    </p>
+  </div>
+  <div class="slide-num">09</div>
+</section>

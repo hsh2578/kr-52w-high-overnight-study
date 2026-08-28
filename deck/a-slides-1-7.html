@@ -1,0 +1,220 @@
+<!-- A안(음성 결과) 덱 · 슬라이드 1~7 -->
+
+<!-- ============ 1. 표지 ============ -->
+<section class="slide" id="a1">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start">
+    <div>
+      <div style="display:flex;align-items:center;gap:26px">
+        <div style="font-size:52px;font-weight:900;letter-spacing:-.03em">FIND-A</div>
+        <div style="width:1px;height:64px;background:var(--line)"></div>
+        <div style="font-size:16px;line-height:1.7;color:var(--muted)">
+          대학연합<br>금융데이터분석학회<br><b style="color:var(--ink)">파인드알파</b>
+        </div>
+      </div>
+      <div style="font-size:12px;letter-spacing:.42em;color:var(--dim);margin-top:10px">
+        FINANCIAL DATA ANALYSIS
+      </div>
+    </div>
+    <div style="text-align:right;font-size:30px;font-weight:700;line-height:1.5">
+      TEAM Beta.<br>황성혁<br>
+      <span style="font-size:22px;color:var(--muted);font-weight:500">26.09.</span>
+    </div>
+  </div>
+
+  <div style="position:absolute;left:88px;bottom:140px;right:88px">
+    <div class="eyebrow">52주 신고가 돌파 · 익일 수익 예측</div>
+    <div style="font-size:58px;font-weight:900;line-height:1.28;letter-spacing:-.025em">
+      52주 신고가 돌파의 익일 초과수익은<br>
+      <span class="accent">어디에서 오는가</span>
+    </div>
+    <div class="sub" style="margin-top:24px;font-size:20px">
+      2020.03 ~ 2026.08 · 국내 보통주 1,674종목 · 돌파 이벤트 6,265건 ·
+      walk-forward 4폴드 · 모델 10종 비교
+    </div>
+  </div>
+  <div class="slide-num">01</div>
+</section>
+
+
+<!-- ============ 2. 목차 ============ -->
+<section class="slide" id="a2">
+  <div style="display:flex;gap:90px;height:100%;align-items:center">
+    <div style="flex:none;width:300px">
+      <div style="font-size:76px;font-weight:900;letter-spacing:-.03em">목차</div>
+      <div style="font-size:19px;color:var(--dim);margin-top:6px">Contents</div>
+    </div>
+    <div style="width:1px;background:var(--line);align-self:stretch;margin:60px 0"></div>
+    <div style="flex:1">
+      <ol style="list-style:none;font-size:29px;font-weight:700;line-height:1">
+        <li style="margin-bottom:28px"><span style="color:var(--dim);margin-right:20px">1.</span>왜 이 연구를 시작했나</li>
+        <li style="margin-bottom:28px"><span style="color:var(--dim);margin-right:20px">2.</span>무엇을 이벤트로 정의했나</li>
+        <li style="margin-bottom:28px"><span style="color:var(--dim);margin-right:20px">3.</span>데이터와 변수 설계</li>
+        <li style="margin-bottom:28px"><span style="color:var(--dim);margin-right:20px">4.</span>모델 10종 비교와 변수 최적화</li>
+        <li style="margin-bottom:28px"><span style="color:var(--dim);margin-right:20px">5.</span><b class="accent">알파는 어디에서 왔나</b></li>
+        <li><span style="color:var(--dim);margin-right:20px">6.</span>결론 — 무엇을 찾지 못했나</li>
+      </ol>
+    </div>
+  </div>
+  <div class="slide-num">02</div>
+</section>
+
+
+<!-- ============ 3. 동기 ============ -->
+<section class="slide" id="a3">
+  <h1 class="title">왜 이 연구를 시작했나</h1>
+  <div class="rule"></div>
+
+  <div class="lead" style="margin-bottom:34px">
+    모의투자대회에서 <span class="accent">짧은 기간에 높은 수익률</span>을 내려면
+    변동성을 감수해야 한다. 문제는 <span class="accent">어떤 변동성을 고를 것인가</span>였다.
+  </div>
+
+  <div class="flow" style="margin-bottom:34px">
+    <div class="step">
+      <div class="n">01 &nbsp;제약</div>
+      <h4>짧은 기간 · 높은 목표</h4>
+      <p>대회 기간은 짧고 순위는 수익률로 갈린다.
+         저변동 전략으로는 상위권 자체가 불가능하다.</p>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step">
+      <div class="n">02 &nbsp;선택</div>
+      <h4>변동성 중 <b>손익비</b>가 좋은 것</h4>
+      <p>변동성이 크다고 다 같지 않다. 손실 대비 이익이
+         큰 사건을 골라야 기대값이 남는다.</p>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step hi">
+      <div class="n">03 &nbsp;대상</div>
+      <h4>52주 신고가 돌파</h4>
+      <p>신고가 위에는 매물대가 없어 상방이 열려 있고,
+         돌파 실패는 직전 저항선에서 손절이 가능하다.</p>
+    </div>
+  </div>
+
+  <div class="card hi">
+    <h3>연구 질문</h3>
+    <p style="font-size:22px;color:var(--ink);font-weight:700;line-height:1.5">
+      52주 신고가를 돌파한 종목 중 <span class="accent">내일 오를 것을 골라낼 수 있는가?</span>
+      — 그리고 그 초과수익은 <span class="accent">실제로 거래 가능한가?</span>
+    </p>
+  </div>
+  <div class="slide-num">03</div>
+</section>
+
+
+<!-- ============ 4. 이벤트 정의 ============ -->
+<section class="slide" id="a4">
+  <h1 class="title">무엇을 "돌파"로 볼 것인가</h1>
+  <div class="rule" style="margin:22px 0 30px"></div>
+
+  <p class="sub" style="margin-bottom:20px;font-size:18px">
+    실전 스크리너에서 쓰던 조건을 그대로 옮겼다. 다섯 가지를 모두 만족해야 이벤트다.
+  </p>
+
+  <div class="grid g3" style="gap:18px;margin-bottom:22px">
+    <div class="card" style="padding:22px 24px">
+      <div class="badge b">조건 1</div>
+      <h3 style="margin-top:12px;font-size:19px">52주 고가 돌파</h3>
+      <p style="font-size:16px">종가 &gt; <b style="color:var(--ink)">[t−265, t−15] 구간
+        고가(High) 최댓값 × 1.015</b>. 창을 15봉 띄우는 이유 — 며칠 전 만든 고점을
+        자기가 넘는 건 돌파가 아니다.</p>
+    </div>
+    <div class="card" style="padding:22px 24px">
+      <div class="badge b">조건 2</div>
+      <h3 style="margin-top:12px;font-size:19px">신규 돌파일 것</h3>
+      <p style="font-size:16px">직전 <b style="color:var(--ink)">15봉 안에 같은 수준을
+        넘은 적이 없을 것.</b> 이미 며칠 전 돌파했다면 오늘은 새 신호가 아니다.</p>
+    </div>
+    <div class="card" style="padding:22px 24px">
+      <div class="badge b">조건 3</div>
+      <h3 style="margin-top:12px;font-size:19px">추세 안에 있을 것</h3>
+      <p style="font-size:16px">종가 &gt; <b style="color:var(--ink)">150일선</b>이고
+        150일선이 20일 전보다 높을 것. 하락 추세의 반등성 신고가를 걸러낸다.</p>
+    </div>
+  </div>
+
+  <div class="grid g2">
+    <div class="card">
+      <div class="badge b">조건 4</div>
+      <h3 style="margin-top:12px;font-size:19px">시가총액 1,000억 이상</h3>
+      <p style="font-size:17px;line-height:1.6">
+        <b style="color:var(--ink)">시점 상장주식수</b>로 계산한다 —
+        KRX에서 월별 스냅샷 80개월치를 받아
+        <code style="font-size:15px">시총(t) = 상장주식수(t 이전 최근) × 종가(t)</code>.
+        현재 주식수를 과거에 적용하면 유상증자·분할을 미리 아는 셈이 된다.
+      </p>
+    </div>
+    <div class="card hi">
+      <div class="badge b" style="background:rgba(178,58,72,.12);color:var(--bad)">조건 5</div>
+      <h3 style="margin-top:12px;font-size:19px">상한가 제외</h3>
+      <p style="font-size:17px;line-height:1.6">
+        등락률 29.5% 미만만 남긴다. <b style="color:var(--ink)">상한가는 종가 동시호가에서
+        매수 잔량만 쌓여 체결을 가정할 수 없다.</b>
+        <b class="accent">이 한 줄이 이 발표의 결론을 결정한다 — §5에서 다룬다.</b>
+      </p>
+    </div>
+  </div>
+  <div class="slide-num">04</div>
+</section>
+
+
+<!-- ============ 5. 데이터 ============ -->
+<section class="slide" id="a5">
+  <h1 class="title">데이터</h1>
+  <div class="rule"></div>
+
+  <div class="stats" style="margin-bottom:34px">
+    <div class="stat">
+      <div class="v sm">2020.03 ~ 2026.08</div>
+      <div class="k">연구 기간 (6년 6개월)</div>
+    </div>
+    <div class="stat">
+      <div class="v sm">1,674<span style="font-size:26px">종목</span></div>
+      <div class="k">돌파를 한 번이라도 낸 보통주</div>
+    </div>
+    <div class="stat">
+      <div class="v sm accent">5,675<span style="font-size:26px">건</span></div>
+      <div class="k">최종 이벤트 (상한가 제외 후)</div>
+    </div>
+  </div>
+
+  <div class="grid g2" style="margin-bottom:24px">
+    <div class="card">
+      <h3>수집 경로</h3>
+      <ul class="bul" style="margin-top:6px">
+        <li><b>일봉 OHLCV</b> — FinanceDataReader. <b>수정주가</b>로 분할·증자에 의한
+            가짜 갭을 제거.</li>
+        <li><b>유니버스</b> — KRX Open API의 증권 종류 코드로 ETF·ETN·ELW·우선주·
+            리츠·외국주권을 제외.</li>
+        <li><b>시점 상장주식수</b> — KRX 월별 스냅샷 80개월 · 206,087행.</li>
+        <li><b>투자자 수급</b> — 키움 REST API 병렬 수집 (결측 17.4%).</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>정제에서 실제로 잡은 것</h3>
+      <ul class="bul" style="margin-top:6px">
+        <li><b>거래정지봉</b> — 원본이 O/H/L/V를 0으로 채운다. 그대로 두면 20봉 창에
+            하나만 섞여도 <span style="color:var(--ink)">RSV·ATR이 붕괴</span>한다.
+            전부 NaN 처리.</li>
+        <li><b>OHLC 불변식 위반</b> — High &lt; max(Open, Close)인 봉.
+            80.5%가 정확히 1원 차이인 <span style="color:var(--ink)">수정주가 반올림
+            아티팩트</span>였다.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card hi">
+    <p style="font-size:18px;line-height:1.6">
+      <b style="color:var(--ink)">예측 대상</b> —
+      돌파일 <b style="color:var(--ink)">종가에 매수 → 익일 시가에 매도</b>,
+      거래비용 0.21%를 <b style="color:var(--ink)">라벨에서 미리 차감</b>.
+      0.1% 오른 거래는 비용을 못 이겨 실제로는 손실이므로, 이 연구가 답하는 것은
+      <b style="color:var(--ink)">'오르는가'가 아니라 '비용을 제하고도 남는가'</b>이다.
+      <span class="tiny" style="display:block;margin-top:8px">
+        익일 상승 확률(gross) 45.9% vs 익일 순이익 확률(net) 41.2% — 이 4.7%p가 비용의 무게다.
+      </span>
+    </p>
+  </div>
+  <div class="slide-num">05</div>
+</section>
