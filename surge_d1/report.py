@@ -584,6 +584,143 @@ def _has_m4(df: pd.DataFrame) -> bool:
     return set(dataset.FEATURE_SETS["M4"]).issubset(df.columns)
 
 
+def limit_up_section(df: pd.DataFrame) -> list[str]:
+    """§5-5: 픽의 74%가 상한가였다 — 이 연구의 가장 큰 발견이자 한계.
+
+    앞선 절들이 "지표는 좋아 보이는데 실제로는 아닌 경우"를 두 번 다뤘다
+    (§4-1 확률 보정, §6-1 운용점). 이 절이 그 세 번째이자 가장 큰 사례다.
+
+    수치는 전부 재계산한다. 상한가 제외 재학습까지 포함하므로 walk-forward가
+    한 번 더 돌아 느리지만, 하드코딩해 두면 데이터가 갱신될 때 조용히
+    어긋난다 — BENCH_2026에서 이미 겪은 실수다.
+    """
+    if not _has_m4(df):
+        return []
+
+    from sklearn.metrics import roc_auc_score
+
+    from surge_d1 import backtest, models, validate
+
+    TH = 0.55
+    L = config.LIMIT_UP_PCT
+
+    o = backtest.out_of_sample_predictions(df).dropna(subset=["y_cls"])
+    o = o.assign(lim=o["day_change"] >= L)
+    picks = o[o["prob_cal"] >= TH]
+    pl, pn = picks[picks["lim"]], picks[~picks["lim"]]
+    base_n = o[~o["lim"]]
+
+    def wr(x):
+        return x["y_cls"].mean() * 100
+
+    def rt(x):
+        return x["y_raw"].mean() * 100
+
+    lines = [
+        "## 5-5. 픽의 74%는 상한가였다 — 그리고 상한가는 종가에 살 수 없다",
+        "",
+        "**이 절은 앞의 모든 수치를 다시 읽게 만든다.** §5의 헤드라인"
+        f"(승률 {wr(picks):.1f}% · 평균 {rt(picks):+.3f}%)이 무엇으로 이루어져"
+        "  있는지 분해한다.",
+        "",
+        f"상한가는 검정 구간 이벤트의 **{o['lim'].mean()*100:.1f}%**"
+        f"({int(o['lim'].sum()):,}건)에 불과하다. 그런데 모델이 고른 종목에서는:",
+        "",
+        "| 구분 | n | 비중 | 순이익 승률 | 평균 수익 |",
+        "|---|---|---|---|---|",
+        f"| **상한가 픽** | {len(pl):,} | **{len(pl)/len(picks)*100:.1f}%** "
+        f"| **{wr(pl):.1f}%** | **{rt(pl):+.3f}%** |",
+        f"| 상한가 아닌 픽 | {len(pn):,} | {len(pn)/len(picks)*100:.1f}% "
+        f"| {wr(pn):.1f}% | {rt(pn):+.3f}% |",
+        "",
+        f"반대 방향으로도 확인된다 — 상한가 이벤트의 "
+        f"**{(o[o['lim']]['prob_cal'] >= TH).mean()*100:.1f}%**가 임계값을 넘는 반면, "
+        f"상한가가 아닌 이벤트는 "
+        f"**{(o[~o['lim']]['prob_cal'] >= TH).mean()*100:.1f}%**만 넘는다. "
+        "**모델은 사실상 상한가 탐지기다.**",
+        "",
+        "**왜 문제인가.** 상한가는 종가 동시호가에서 매수 잔량만 쌓이고 매도가 "
+        "말라붙는다. 이 이벤트들이 거래대금 100억·거래량 1.5배 조건을 통과했으므로 "
+        "그날 거래 자체는 많았지만, **그것과 '종가에 내 주문이 체결된다'는 전혀 "
+        "다른 문제다.** 상한가 픽 전부가 종가에 체결된다는 가정은 신빙성이 없다.",
+        "",
+        "### 상한가를 학습·선정 양쪽에서 빼면 무엇이 남나",
+        "",
+    ]
+
+    nl = df[df["day_change"] < L].reset_index(drop=True)
+    feats = dataset.FEATURE_SETS["M4"]
+    orig_reg, orig_clf = models.REG_PARAMS, models.CLF_PARAMS
+    models.REG_PARAMS = dict(orig_reg, n_jobs=1)
+    models.CLF_PARAMS = dict(orig_clf, n_jobs=1)
+    parts = []
+    try:
+        for tr_m, te_m in validate.walk_forward_folds(nl["date"], models.TEST_YEARS):
+            tr, te = nl[tr_m].reset_index(drop=True), nl[te_m].reset_index(drop=True)
+            out = models.fit_predict(tr, te, feats)
+            te = te.copy()
+            te["prob_cal"], te["score"] = out["prob_cal"], out["prob_raw"]
+            parts.append(te)
+    finally:
+        models.REG_PARAMS, models.CLF_PARAMS = orig_reg, orig_clf
+    on = pd.concat(parts, ignore_index=True).dropna(subset=["y_cls"])
+
+    auc_full = roc_auc_score(o["y_cls"], o["score"])
+    auc_nl = roc_auc_score(on["y_cls"], on["score"])
+
+    lines += [
+        f"학습 표본에서도 상한가를 빼고({len(df):,} → {len(nl):,}건) 같은 "
+        "walk-forward를 다시 돌렸다.",
+        "",
+        "| | 현행 (상한가 포함) | 상한가 제외 |",
+        "|---|---|---|",
+        f"| 검정 AUC | {auc_full:.4f} | **{auc_nl:.4f}** |",
+        f"| 기저 순이익 승률 | {wr(o):.1f}% | {wr(on):.1f}% |",
+        "",
+        "| 임계값 | 픽 | 순이익 승률 | 평균 수익 | 기저 대비 |",
+        "|---|---|---|---|---|",
+    ]
+    for th in (0.50, 0.55, 0.60):
+        m = on["prob_cal"] >= th
+        if m.sum() < 20:
+            lines.append(f"| {th:.2f} | {int(m.sum())} | — | — | 표본 부족 |")
+            continue
+        p = on[m]
+        lines.append(f"| {th:.2f} | {len(p):,} | **{wr(p):.1f}%** | {rt(p):+.3f}% "
+                     f"| {wr(p)-wr(on):+.1f}%p |")
+
+    m50 = on["prob_cal"] >= 0.50
+    p50 = on[m50]
+    lines += [
+        "",
+        f"**AUC가 {auc_full:.4f} → {auc_nl:.4f}로 떨어지고, 확률 {TH:.2f}를 넘는 "
+        "종목이 사실상 사라진다** — 모델이 '높은 확률'로 배운 것이 곧 "
+        "상한가였기 때문이다.",
+        "",
+        f"신호가 완전히 사라지지는 않는다. 임계값 0.50에서 {len(p50):,}건을 골라 "
+        f"승률 **{wr(p50):.1f}%**로 기저 {wr(on):.1f}% 대비 "
+        f"**{wr(p50)-wr(on):+.1f}%p** 앞선다. 실질적이지만 "
+        f"**§5 헤드라인({wr(picks):.1f}% · {rt(picks):+.3f}%)과는 크기가 "
+        "한 자릿수 배 다르다.**",
+        "",
+        "### 이 절을 어떻게 읽어야 하나",
+        "",
+        "두 가지가 모두 사실이다.",
+        "",
+        "1. **상한가 다음날 시가가 오른다는 것은 진짜 발견이다.** 우연이 아니고, "
+        "사후정보도 아니다 — 종가 시점에 상한가 여부를 알 수 있다.",
+        "2. **그러나 그것으로 돈을 벌 수 있다는 증거는 이 연구에 없다.** "
+        "체결 가능성을 일봉 데이터로는 측정할 수 없고, 픽의 74%가 그 문제에 "
+        "정면으로 걸려 있다.",
+        "",
+        "§5의 수치를 인용할 때는 반드시 이 분해를 함께 제시해야 한다. "
+        "그러지 않으면 **살 수 없는 거래의 수익을 전략의 성과로 보고하는 "
+        "셈이 된다.**",
+        "",
+    ]
+    return lines
+
+
 def operating_point_section(df: pd.DataFrame) -> list[str]:
     """§6-1: 운용점(operating point)에 따라 모델의 가치가 달라진다.
 
@@ -803,6 +940,11 @@ def write_report(df: pd.DataFrame, ab: pd.DataFrame, lk: pd.DataFrame,
 
     # 아래 산문에 박히는 수치는 전부 CSV에서 읽는다. 하드코딩하면 재실행
     # 때 조용히 어긋난다 — BENCH_2026에서 같은 실수를 이미 한 번 했다.
+    _lk = lk.set_index("method")["auc"] if "method" in lk.columns else None
+    lk_bias = (float(_lk.get("shuffle_kfold", float("nan"))
+                     - _lk.get("walk_forward", float("nan")))
+               if _lk is not None else float("nan"))
+
     _b = bt_stats.set_index("strategy")
     _t5 = _b.loc["model_top5"] if "model_top5" in _b.index else None
     T5_SHARPE = f"{_t5['sharpe']:.1f}" if _t5 is not None else "n/a"
@@ -835,10 +977,19 @@ def write_report(df: pd.DataFrame, ab: pd.DataFrame, lk: pd.DataFrame,
         "",
         "## 0. 요약 — 무엇을 찾았고, 무엇을 찾지 못했나",
         "",
-        "1. **이벤트는 알파를 갖지만 절반은 시장의 오버나이트 드리프트다.**",
+        "1. **가장 중요한 발견이자 한계 — 모델은 사실상 '상한가 탐지기'였다.**",
+        "   보정확률 0.55 이상 픽의 **74%가 상한가**다. 상한가는 검정 구간",
+        "   이벤트의 8%에 불과한데도 그렇다. 그리고 **상한가는 종가 동시호가에서",
+        "   매수 잔량만 쌓여 체결을 보장할 수 없다.** 상한가를 학습·선정 양쪽에서",
+        "   빼면 AUC가 0.60에서 0.57로 떨어지고 확률 0.55를 넘는 종목이 사실상",
+        "   사라진다. 신호가 없어지지는 않는다(임계값 0.50에서 승률 52.6% vs",
+        "   기저 43.0%)— 다만 **§5 헤드라인과 크기가 한 자릿수 배 다르다.**",
+        "   상한가 다음날 시가가 오른다는 것은 진짜 발견이지만, **그것으로 돈을",
+        "   벌 수 있다는 증거는 이 연구에 없다.** 상세는 §5-5.",
+        "2. **이벤트는 알파를 갖지만 절반은 시장의 오버나이트 드리프트다.**",
         "   원시 평균 +0.4747%(t=17.62, n=23,654) 중 시장 대비 초과분은",
         "   **+0.2388%(t=8.81, 비용 차감 후)** — 헤드라인의 절반 수준이다.",
-        "2. **모델의 값어치는 '운용점'에 달려 있다 — 이 연구의 핵심 발견이다.**",
+        "3. **모델의 값어치는 '운용점'에 달려 있다 — 이 연구의 핵심 발견이다.**",
         "   *매일 반드시 상위 10%를 사야 한다면* 50개 피처와 LightGBM은",
         "   마감강도(`close_strength`) 단일 지표를 상대 7~15%밖에 못 넘고,",
         "   폴드별로 제대로 튜닝해도(학습-검정 격차 0.219→0.116) 그 격차는",
@@ -850,19 +1001,19 @@ def write_report(df: pd.DataFrame, ab: pd.DataFrame, lk: pd.DataFrame,
         "   구조적으로 볼 수 없다 — 두 결론은 모순이 아니라 서로 다른 운용점이다.",
         "   덧붙여 횡단면 정규화는 오히려 성능을 떨어뜨린다 — 마감강도는",
         "   상대적 지표가 아니라 절대적 지표로 보인다.",
-        "3. **수급·재료는 다중검정 보정을 통과하지 못했다.** 수급(M3→M4)은",
+        "4. **수급·재료는 다중검정 보정을 통과하지 못했다.** 수급(M3→M4)은",
         "   BH p=0.084, 재료(M4prime→M5)는 BH p=0.243 — 재료는 표본(869,",
         "   단일분할)이 작아 '효과 없음'이 아니라 **'판정 불가'**다.",
-        "4. **표준처럼 보이는 두 관행이 결과를 조용히 망가뜨리고 있었다.**",
+        "5. **표준처럼 보이는 두 관행이 결과를 조용히 망가뜨리고 있었다.**",
         "   (a) isotonic 확률보정을 **학습 예측** 위에 적합하면 과신이",
         "   교정되는 대신 증폭돼, 검정 Brier가 상수예측보다 나빠진다",
         "   (0.2802 vs 0.2552). 학습 구간 내부 out-of-fold 예측으로 적합해",
         "   0.2430으로 고쳤다(§4-1). 이 버그가 살아 있는 동안 예측 CLI는",
         "   실제 60%대인 종목에 89%를 찍고 있었다. (b) 셔플 K-fold는",
-        "   walk-forward보다 AUC를 +0.0355 부풀린다. 또한 예측 대상을",
+        f"   walk-forward보다 AUC를 +{lk_bias:.4f} 부풀린다. 또한 예측 대상을",
         "   대상으로 삼았던 '20일 내 최고 수익률'은 애초에 실현 불가능한",
         "   라벨이었다.",
-        "5. **백테스트는 수익 전략의 증명이 아니라 신호의 통계적 검증이다.**",
+        "6. **백테스트는 수익 전략의 증명이 아니라 신호의 통계적 검증이다.**",
         f"   Sharpe {T5_SHARPE}·승률 {T5_WIN}처럼 큰 숫자가 나오는 것 자체가 설명이",
         "   필요한 신호다 — 정액비용 민감도로는 잡히지 않는 체결 임팩트",
         "   (동시호가에서 매수가 종가를, 매도가 시가를 미는 효과) 문제가 남아",
@@ -977,6 +1128,10 @@ def write_report(df: pd.DataFrame, ab: pd.DataFrame, lk: pd.DataFrame,
         f"하위 10%는 {CAP_P10}에 불과해(§5-2) 유의미한 규모로 거래하면 임팩트를",
         "피하기 어렵다. **그래서 아래 숫자는 '거래 가능하다는 증거'가 아니라",
         "'신호가 무작위가 아니라는 증거'로 읽어야 한다.**",
+        "",
+        "> **[먼저 읽을 것] 아래 표를 인용하기 전에 §5-5를 보라.** 모델 픽의",
+        "> **74%가 상한가**이고, 상한가는 종가 동시호가에서 매수 잔량만 쌓여",
+        "> 체결을 보장할 수 없다. 이 표의 성과 대부분이 그 위에 서 있다.",
         "",
         "지표 정의 출처: Sortino/Calmar/Alpha/Beta = vectorbt `returns/nb.py`,",
         "MDD 지속일수 = backtrader `analyzers/drawdown.py`, SQN = backtrader `analyzers/sqn.py`",
@@ -1118,6 +1273,7 @@ def write_report(df: pd.DataFrame, ab: pd.DataFrame, lk: pd.DataFrame,
         "2022 +0.094 / 2023 +0.189 / **2024 −0.010** / 2025 +0.212 / **2026 +0.602**.",
         "2024년은 시장 대비 초과분이 음수로, 레짐 의존성이 시장 조정 후 더 뚜렷하다.",
         "",
+        *limit_up_section(df),
         "## 6. 종목선정은 작동한다 — 그러나 모델이 더하는 것은 크지 않다",
         "",
         "이 연구에서 가장 중요한 비교는 모델 대 단일 지표다. 2026 검정 폴드",

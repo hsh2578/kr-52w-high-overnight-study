@@ -18,7 +18,8 @@ from surge_d1 import config
 def is_breakout(df: pd.DataFrame, i: int) -> bool:
     """봉 i가 52주 신고가 돌파 이벤트인가.
 
-    조건 (스펙 §3.1): 신고가 · 거래량 1.5배 · 거래대금 100억 · i>=260 · 익일 존재
+    조건 (스펙 §3.1): 252봉 종가 신고가 · 거래량이 **직전 50봉 평균**의 1.5배
+    · 당일 거래대금 100억 · i>=260 · 익일 존재
     · 최근 HALT_LOOKBACK봉과 익일 봉에 거래정지 없음
     """
     if i < config.MIN_BAR_INDEX or i + 1 >= len(df):

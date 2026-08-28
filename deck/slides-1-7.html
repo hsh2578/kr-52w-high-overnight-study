@@ -1,0 +1,331 @@
+<!-- 슬라이드 1~7. index.html이 이 조각을 합쳐 하나의 덱으로 만든다. -->
+
+<!-- ============ 1. 표지 ============ -->
+<section class="slide" id="s1">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start">
+    <div>
+      <div style="display:flex;align-items:center;gap:26px">
+        <div style="font-size:52px;font-weight:900;letter-spacing:-.03em">FIND-A</div>
+        <div style="width:1px;height:64px;background:#3A3A3A"></div>
+        <div style="font-size:16px;line-height:1.7;color:var(--muted)">
+          대학연합<br>금융데이터분석학회<br><b style="color:#fff">파인드알파</b>
+        </div>
+      </div>
+      <div style="font-size:12px;letter-spacing:.42em;color:var(--dim);margin-top:10px">
+        FINANCIAL DATA ANALYSIS
+      </div>
+    </div>
+    <div style="text-align:right;font-size:30px;font-weight:700;line-height:1.5">
+      TEAM Beta.<br>황성혁<br>
+      <span style="font-size:22px;color:var(--muted);font-weight:500">26.09.</span>
+    </div>
+  </div>
+
+  <div style="position:absolute;left:88px;bottom:150px;right:88px">
+    <div class="eyebrow">52주 신고가 돌파 · D+1 초과수익 연구</div>
+    <div style="font-size:62px;font-weight:900;line-height:1.28;letter-spacing:-.025em">
+      52주 신고가 돌파 종목의 익일 초과수익<br>
+      <span class="accent">— ML 선별은 언제 유효한가</span>
+    </div>
+    <div class="sub" style="margin-top:26px;font-size:20px">
+      2020.01 ~ 2026.08 · 국내 보통주 2,116종목 · 돌파 이벤트 23,654건 ·
+      walk-forward 4폴드 검정
+    </div>
+  </div>
+  <div class="slide-num">01</div>
+</section>
+
+
+<!-- ============ 2. 목차 ============ -->
+<section class="slide" id="s2">
+  <div style="display:flex;gap:90px;height:100%;align-items:center">
+    <div style="flex:none;width:300px">
+      <div style="font-size:76px;font-weight:900;letter-spacing:-.03em">목차</div>
+      <div style="font-size:19px;color:var(--dim);margin-top:6px">Contents</div>
+    </div>
+    <div style="width:1px;background:var(--line);align-self:stretch;margin:60px 0"></div>
+    <div style="flex:1">
+      <ol style="list-style:none;font-size:30px;font-weight:700;line-height:1">
+        <li style="margin-bottom:30px"><span style="color:var(--dim);margin-right:20px">1.</span>왜 이 연구를 시작했나</li>
+        <li style="margin-bottom:30px"><span style="color:var(--dim);margin-right:20px">2.</span>무엇을 이벤트로 정의했나</li>
+        <li style="margin-bottom:30px"><span style="color:var(--dim);margin-right:20px">3.</span>데이터와 변수 설계</li>
+        <li style="margin-bottom:30px"><span style="color:var(--dim);margin-right:20px">4.</span>모델과 검증 설계</li>
+        <li style="margin-bottom:30px"><span style="color:var(--dim);margin-right:20px">5.</span>결과 — 그냥 돌파 vs 선별 시스템</li>
+        <li style="margin-bottom:30px"><span style="color:var(--dim);margin-right:20px">6.</span>그 픽의 74%는 살 수 없었다</li>
+        <li><span style="color:var(--dim);margin-right:20px">7.</span>한계와 결론</li>
+      </ol>
+    </div>
+  </div>
+  <div class="slide-num">02</div>
+</section>
+
+
+<!-- ============ 3. 동기 ============ -->
+<section class="slide" id="s3">
+  <h1 class="title">왜 이 연구를 시작했나</h1>
+  <div class="rule"></div>
+
+  <div class="lead" style="margin-bottom:34px">
+    모의투자대회에서 <span class="accent">짧은 기간에 높은 수익률</span>을 내려면
+    변동성을 감수해야 한다. 문제는 <span class="accent">어떤 변동성을 고를 것인가</span>였다.
+  </div>
+
+  <div class="flow" style="margin-bottom:34px">
+    <div class="step">
+      <div class="n">01 &nbsp;제약</div>
+      <h4>짧은 기간 · 높은 목표</h4>
+      <p>대회 기간은 짧고 순위는 수익률로 갈린다.
+         저변동 전략으로는 상위권 자체가 불가능하다.</p>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step">
+      <div class="n">02 &nbsp;선택</div>
+      <h4>변동성 중 <b>손익비</b>가 좋은 것</h4>
+      <p>변동성이 크다고 다 같지 않다. 손실 대비 이익이
+         큰 사건을 골라야 기대값이 남는다.</p>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step hi">
+      <div class="n">03 &nbsp;대상</div>
+      <h4>52주 신고가 돌파</h4>
+      <p>신고가 위에는 매물대가 없어 상방이 열려 있고,
+         돌파 실패는 직전 저항선에서 손절이 가능하다.</p>
+    </div>
+  </div>
+
+  <div class="card hi">
+    <h3>그래서 이 연구의 질문</h3>
+    <p style="font-size:22px;color:#fff;font-weight:700;line-height:1.5">
+      52주 신고가를 돌파한 종목은 매일 수십 개씩 나온다.
+      그중 <span class="accent">내일 더 오를 종목을 골라낼 수 있는가?</span>
+      — 그리고 그 선별은 <span class="accent">단순한 규칙보다 나은가?</span>
+    </p>
+  </div>
+  <div class="slide-num">03</div>
+</section>
+
+
+<!-- ============ 4. 연구 질문 확정 ============ -->
+<section class="slide" id="s4">
+  <h1 class="title">예측 지평을 <span class="accent">하루</span>로 고정한 이유</h1>
+  <div class="rule"></div>
+
+  <div class="grid g2" style="margin-bottom:30px">
+    <div class="card hi">
+      <h3>채택 — 익일 시가 청산</h3>
+      <p style="font-size:19px;line-height:1.65">
+        돌파일 <b style="color:#fff">종가에 매수</b> →
+        <b style="color:#fff">익일 시가에 매도</b>.<br><br>
+        하룻밤만 노출되므로 진입·청산 시점이 명확하고,
+        누구나 같은 규칙으로 재현할 수 있다.
+        오버나이트 갭은 <b style="color:#fff">실제로 체결 가능한</b> 구간이다.
+      </p>
+    </div>
+    <div class="card">
+      <h3>기각 — "20일 내 최고 수익률"</h3>
+      <p style="font-size:19px;line-height:1.65">
+        초기 설계에서 검토했으나 버렸다.<br><br>
+        20일 중 <b style="color:var(--bad)">언제가 최고점이었는지는
+        사후에만 알 수 있다.</b> 이를 예측 대상으로 삼으면
+        애초에 <b style="color:var(--bad)">실현 불가능한 목표</b>를
+        학습하게 되고, 성능이 부풀려진다.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>예측 대상 정의</h3>
+    <div style="font-size:23px;font-weight:700;margin:12px 0 14px;line-height:1.6">
+      y = (익일 시가 − 당일 종가) / 당일 종가 −
+      <span class="accent">거래비용 0.21%</span>
+    </div>
+    <p style="font-size:18px">
+      <b style="color:#fff">비용을 라벨에 미리 차감한 것이 핵심이다.</b>
+      0.1% 오른 거래는 비용을 못 이겨 실제로는 손실이다. 비용을 빼지 않고
+      "상승 확률"을 재면 이길 수 없는 거래를 성공으로 세게 된다.
+      그래서 이 연구가 예측하는 것은 <b style="color:#fff">'오르는가'가 아니라
+      '비용을 제하고도 남는가'</b>이다.
+    </p>
+  </div>
+
+  <div class="tiny" style="margin-top:20px">
+    참고 — 익일 상승 확률(gross) 47.6% vs 익일 순이익 확률(net) 44.6%.
+    이 3.0%p 차이가 비용의 무게다.
+  </div>
+  <div class="slide-num">04</div>
+</section>
+
+
+<!-- ============ 5. 이벤트 정의 ============ -->
+<section class="slide" id="s5">
+  <h1 class="title">무엇을 "돌파"로 볼 것인가</h1>
+  <div class="rule"></div>
+
+  <div class="grid g3" style="margin-bottom:28px">
+    <div class="card">
+      <div class="badge b">조건 1</div>
+      <h3 style="margin-top:14px">252봉 신고가 경신</h3>
+      <p>당일 종가가 직전 <b style="color:#fff">252거래일</b> 최고 종가를 넘을 것.
+         252일 = 1년치 거래일이라 "52주"의 정확한 정의다.</p>
+    </div>
+    <div class="card">
+      <div class="badge b">조건 2</div>
+      <h3 style="margin-top:14px">거래량 <b style="color:#fff">50일 평균의 1.5배</b> 이상</h3>
+      <p>거래량 없는 신고가는 매물 소진이 아니라 호가 공백일 수 있다.
+         수급이 실제로 들어온 돌파만 남긴다.</p>
+    </div>
+    <div class="card">
+      <div class="badge b">조건 3</div>
+      <h3 style="margin-top:14px">당일 거래대금 <b style="color:#fff">100억</b> 이상</h3>
+      <p>체결 불가능한 종목을 연구 대상에 넣으면 백테스트가 거짓말이 된다.
+         이 조건이 <b style="color:#fff">전체 돌파의 33.6%를 거른다</b>
+         (35,647 → 23,654건).</p>
+    </div>
+  </div>
+
+  <div class="grid g2">
+    <div class="card">
+      <h3>데이터 무결성 필터</h3>
+      <ul class="bul" style="margin-top:6px">
+        <li><b>최소 260봉 이력</b> — 252봉 창을 온전히 채우지 못한
+            신규 상장은 "신고가"를 정의할 수 없다.</li>
+        <li><b>일간 변동 ±32% 초과 배제</b> — KRX 제한폭은 ±30%다.
+            이를 넘는 값은 물리적으로 불가능한 손상 데이터다.</li>
+        <li><b>거래정지 직후 재개봉 배제</b> — 정지 중 종가가 고정된 채
+            재개되면 갭이 최대 +1,494%까지 튄다.</li>
+      </ul>
+    </div>
+    <div class="card hi">
+      <h3>유동성 하한이 무엇을 사는가</h3>
+      <p style="font-size:17px;line-height:1.65">
+        거래대금 100억 미만으로 잘려나간 <b style="color:#fff">11,993건</b>도
+        알파 자체는 있다 — 평균 <b style="color:#fff">+0.489%(t=15.02)</b>로
+        남은 집단(+0.475%)보다 오히려 높다.
+      </p>
+      <p style="font-size:17px;line-height:1.65;margin-top:12px">
+        <b style="color:#fff">그럼에도 버리는 이유는 체결이다.</b>
+        조건 없는 돌파의 거래대금 하위 10%는 12억에 불과해, 종가 매수·시가
+        매도가 그대로 체결된다고 가정할 수 없다. 이 필터는
+        <b style="color:#fff">수익률을 조금 포기하고 거래 가능성을 사는</b>
+        교환이며, 그 대가를 숨기지 않고 밝힌다.
+      </p>
+    </div>
+  </div>
+  <div class="slide-num">05</div>
+</section>
+
+
+<!-- ============ 6. 유니버스 ============ -->
+<section class="slide" id="s6">
+  <h1 class="title">유니버스 — <span class="accent">보통주만</span> 남긴다</h1>
+  <div class="rule"></div>
+
+  <div class="stats" style="margin-bottom:36px">
+    <div class="stat">
+      <div class="v">2,605</div>
+      <div class="k">연구 대상 보통주 (KRX Open API 기준)</div>
+    </div>
+    <div class="stat">
+      <div class="v accent">16.7%</div>
+      <div class="k">제외된 이벤트 비중 — 4,748건 / 277종목</div>
+    </div>
+    <div class="stat">
+      <div class="v">t = 0.95</div>
+      <div class="k">제외 집단의 유의성 — 신호가 없다</div>
+    </div>
+  </div>
+
+  <div class="grid g2">
+    <div class="card">
+      <h3>무엇을 제외했나</h3>
+      <p style="font-size:18px;line-height:1.75">
+        ETF 1,163 · ETN 373 · ELW 2,756 ·
+        우선주(구형 78 / 신형 23 / 종류주권 13) ·
+        부동산투자회사 23 · 외국주권 12 ·
+        주식예탁증권 10 · 인프라투융자 2
+      </p>
+      <p style="margin-top:14px;font-size:18px">
+        <b style="color:#fff">지수 추종 ETP는 상승장에서 신고가를 계속 갱신한다.</b>
+        개별 기업의 재료가 존재하지 않고, 갭이 기초지수(해외 ETF면 미국 시장)에
+        좌우된다. 개별주 연구에 섞이면 연구 대상 자체가 달라진다.
+      </p>
+    </div>
+    <div class="card hi">
+      <h3>이 결정을 정직하게 보고한다</h3>
+      <p style="font-size:18px;line-height:1.7">
+        정제는 헤드라인을 <b style="color:#fff">+0.402% → +0.4747%로
+        개선시켰다.</b> 데이터를 본 뒤 내린 결정이 결과를 좋게 만들었으므로
+        가장 엄격히 검증되어야 할 지점이다.
+      </p>
+      <p style="margin-top:14px;font-size:18px;line-height:1.7">
+        방어 근거 — 제외 기준이 <b style="color:#fff">사후 성과가 아니라
+        KRX가 부여한 증권 종류</b>이고, 제외된 집단은
+        <b style="color:#fff">t=0.95로 애초에 엣지가 없다.</b>
+        성과가 나쁜 것을 골라 버린 게 아니라 다른 자산군을 분리한 것이다.
+      </p>
+    </div>
+  </div>
+
+  <div class="tiny" style="margin-top:18px">
+    부수 검증 — "2026년 강세가 상승장 ETF 때문 아닌가"라는 가설을 세웠으나
+    반증됐다. ETP 제거 후 2026년이 오히려 +1.093%로 강해졌다.
+  </div>
+  <div class="slide-num">06</div>
+</section>
+
+
+<!-- ============ 7. 데이터 수집 ============ -->
+<section class="slide" id="s7">
+  <h1 class="title">데이터 수집과 정제</h1>
+  <div class="rule"></div>
+
+  <div class="stats" style="margin-bottom:32px">
+    <div class="stat">
+      <div class="v sm">2020.01 ~ 2026.08</div>
+      <div class="k">연구 기간 (6년 7개월)</div>
+    </div>
+    <div class="stat">
+      <div class="v sm">2,116<span style="font-size:26px">종목</span></div>
+      <div class="k">돌파를 한 번이라도 낸 종목</div>
+    </div>
+    <div class="stat">
+      <div class="v sm accent">23,654<span style="font-size:26px">건</span></div>
+      <div class="k">최종 이벤트 수</div>
+    </div>
+  </div>
+
+  <div class="grid g2" style="margin-bottom:26px">
+    <div class="card">
+      <h3>수집 경로</h3>
+      <ul class="bul" style="margin-top:6px">
+        <li><b>일봉 OHLCV</b> — FinanceDataReader로 증분 갱신.
+            <b>수정주가</b>를 사용해 액면분할·증자로 인한 가짜 갭을 제거.</li>
+        <li><b>유니버스</b> — KRX Open API의 증권 종류 코드
+            (<span class="tiny" style="display:inline">SECUGRP_NM · KIND_STKCERT_TP_NM</span>).</li>
+        <li><b>투자자 수급</b> — 키움 REST API(ka10059)를 병렬 수집.
+            외국인·기관·개인 순매수.</li>
+        <li><b>재료</b> — 특징주 사유 텍스트, 이벤트의 9.1%에 매칭.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>정제에서 실제로 잡은 것</h3>
+      <ul class="bul" style="margin-top:6px">
+        <li><b>거래정지봉(전체의 1.61%)</b> — 원본이 O/H/L/V를 0으로 채운다.
+            0을 그대로 두면 20봉 창에 하나만 섞여도
+            <span style="color:#fff">RSV·ATR 계산이 붕괴</span>한다. 전부 NaN 처리.</li>
+        <li><b>OHLC 불변식 위반 9,183건(0.208%)</b> — High &lt; max(Open, Close).
+            80.5%가 정확히 1원 차이인 <span style="color:#fff">수정주가 반올림
+            아티팩트</span>였다. 복구 전 마감강도가 1.0을 넘는 이벤트 89건 → 복구 후 0건.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card hi">
+    <p style="font-size:19px;line-height:1.6">
+      <b style="color:#fff">이 정제들은 이벤트 수도 라벨 평균도 바꾸지 않는다.</b>
+      피처 품질만 고친 것이다 — 결과를 좋게 만들려는 조정과 구분하기 위해,
+      각 결정이 헤드라인을 얼마나 움직였는지 별도 문서로 기록했다.
+    </p>
+  </div>
+  <div class="slide-num">07</div>
+</section>

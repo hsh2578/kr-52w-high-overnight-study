@@ -1,0 +1,136 @@
+/* FIND-A Sprint 발표 덱 — 참고 PDF의 디자인 언어를 재현한다.
+   검정 배경 · 흰 텍스트 · 블루 액센트 · 좌상단 굵은 제목 + 얇은 구분선. */
+
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
+
+:root {
+  --bg: #0A0A0A;
+  --fg: #FFFFFF;
+  --muted: #9CA3AF;
+  --dim: #6B7280;
+  --accent: #3B82F6;
+  --accent-soft: #60A5FA;
+  --card: #141414;
+  --card-2: #1A1A1A;
+  --line: #2A2A2A;
+  --good: #34D399;
+  --bad: #F87171;
+  --slide-w: 1600px;
+  --slide-h: 900px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #050505;
+  color: var(--fg);
+  font-family: 'Noto Sans KR', 'Pretendard', 'Malgun Gothic', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  margin: 0;
+}
+
+/* 슬라이드는 1600x900 고정. 크기 맞춤은 deck-stage.js가 transform:scale로
+   처리한다 — 반응형 재배치를 하지 않는 이유는 발표 판면이 설계한 그대로
+   보여야 하기 때문이다. 여기서는 판면 '안'의 배치만 정한다. */
+.slide {
+  width: var(--slide-w);
+  height: var(--slide-h);
+  background: var(--bg);
+  padding: 72px 88px 64px;
+  overflow: hidden;
+}
+
+.slide-num {
+  position: absolute; right: 40px; bottom: 28px;
+  font-size: 16px; color: #3A3A3A; letter-spacing: .04em;
+}
+
+h1.title {
+  font-size: 52px; font-weight: 900; letter-spacing: -.02em; line-height: 1.15;
+}
+.rule { height: 1px; background: var(--line); margin: 26px 0 40px; }
+
+.lead { font-size: 25px; font-weight: 700; line-height: 1.5; }
+.sub  { font-size: 19px; color: var(--muted); line-height: 1.65; font-weight: 400; }
+.tiny { font-size: 16px; color: var(--dim); line-height: 1.6; }
+
+.accent { color: var(--accent-soft); }
+.good { color: var(--good); }
+.bad { color: var(--bad); }
+strong { font-weight: 700; }
+
+/* --- 카드 --- */
+.card {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 14px; padding: 26px 30px;
+}
+.card.hi { border-color: var(--accent); background: #0E1626; }
+.card h3 { font-size: 21px; font-weight: 700; margin-bottom: 12px; }
+.card p  { font-size: 17px; color: var(--muted); line-height: 1.6; }
+
+.grid { display: grid; gap: 22px; }
+.g2 { grid-template-columns: 1fr 1fr; }
+.g3 { grid-template-columns: repeat(3, 1fr); }
+.g4 { grid-template-columns: repeat(4, 1fr); }
+
+/* --- 큰 통계 --- */
+.stats { display: flex; align-items: stretch; gap: 0; }
+.stat { flex: 1; padding: 0 40px; }
+.stat:first-child { padding-left: 0; }
+.stat + .stat { border-left: 1px solid var(--line); }
+.stat .v { font-size: 54px; font-weight: 900; letter-spacing: -.02em; line-height: 1.1; }
+.stat .v.sm { font-size: 40px; }
+.stat .k { font-size: 16px; color: var(--dim); margin-top: 10px; }
+
+/* --- 단계 흐름 (01 → 02 → 03) --- */
+.flow { display: flex; align-items: stretch; gap: 16px; }
+.step { flex: 1; background: var(--card); border: 1px solid var(--line);
+        border-radius: 14px; padding: 22px 24px; }
+.step.hi { border-color: var(--accent); background: #0E1626; }
+.step .n { font-size: 16px; font-weight: 700; color: var(--accent); letter-spacing: .1em; }
+.step h4 { font-size: 20px; font-weight: 700; margin: 8px 0 10px; }
+.step p { font-size: 16px; color: var(--muted); line-height: 1.55; }
+.arrow { align-self: center; color: var(--accent); font-size: 26px; flex: none; }
+
+/* --- 표 --- */
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 13px 16px; font-size: 18px; }
+th { font-size: 16px; color: var(--dim); font-weight: 500;
+     border-bottom: 1px solid var(--line); letter-spacing: .02em; }
+td { border-bottom: 1px solid #1C1C1C; }
+tbody tr:last-child td { border-bottom: none; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr.hl td { background: #0E1626; font-weight: 700; }
+tr.hl td:first-child { border-left: 2px solid var(--accent); }
+tr.dim td { color: var(--dim); }
+
+/* 표가 두 개 이상 들어가 판면을 넘기는 슬라이드용. 글자 크기는 그대로 두고
+   행 간격만 조인다 — 발표장 뒷줄에서 읽혀야 하므로 폰트를 줄이면 안 된다. */
+.slide.tight th, .slide.tight td { padding: 9px 14px; }
+.slide.tight .card { padding: 20px 24px; }
+.slide.tight ul.bul li { margin-bottom: 10px; }
+
+/* --- 목록 --- */
+ul.bul { list-style: none; }
+ul.bul li { position: relative; padding-left: 22px; margin-bottom: 15px;
+            font-size: 19px; color: var(--muted); line-height: 1.6; }
+ul.bul li::before { content: ''; position: absolute; left: 0; top: 11px;
+            width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+ul.bul li b { color: var(--fg); font-weight: 700; }
+
+/* --- 배지 --- */
+.badge { display: inline-block; font-size: 16px; font-weight: 700;
+         padding: 5px 12px; border-radius: 999px; letter-spacing: .02em; }
+.badge.b { background: rgba(59,130,246,.16); color: var(--accent-soft); }
+.badge.g { background: rgba(52,211,153,.14); color: var(--good); }
+.badge.r { background: rgba(248,113,113,.14); color: var(--bad); }
+
+/* --- 이미지 --- */
+img.fig { width: 100%; height: 100%; object-fit: contain;
+          background: #fff; border-radius: 10px; }
+
+.eyebrow { font-size: 16px; font-weight: 700; color: var(--accent);
+           letter-spacing: .12em; margin-bottom: 14px; }
+
+/* 인쇄(PDF 내보내기) 규칙은 deck-stage.js가 갖고 있다. 여기에 또 두면
+   두 벌이 어긋날 때 어느 쪽이 이기는지 알 수 없게 된다. */
