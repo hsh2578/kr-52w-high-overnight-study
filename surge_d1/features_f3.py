@@ -8,8 +8,9 @@ Alpha158DL.get_feature_config() (그리고 qlib/data/ops.py의 IdxMax/Std/Corr
 하나만** 쓴다 — KBAR 9 + 롤링 11 = 20). 재현이 목적이므로 정의를
 "개선"하지 않는다 — 이상해 보이는 식도 그대로 옮기고 리포트에 기록한다.
 
-리뷰(2026-08-28)에서 qlib 원본 소스와 대조해 5건의 정의 이탈(치명 2건 +
-중요 3건)과 사소 1건이 발견되어 이 버전에서 수정했다. 상세 근거는
+리뷰(2026-08-28, 2회에 걸쳐 진행)에서 qlib 원본 소스와 대조해 총 6건의
+정의 이탈(치명 2건 + 중요 3건 + 사소 1건, 1차)과 ddof 1건(2차, 사소하지
+않음 — 아래 8번)이 발견되어 이 버전에서 수정했다. 상세 근거는
 task-6-report.md의 "Fix report" 절 참조. 요약:
 
 1. **IMAX_20 (치명)**: qlib의 IdxMax(High, d)/d는 "창의 가장 오래된 봉을
@@ -50,6 +51,14 @@ task-6-report.md의 "Fix report" 절 참조. 요약:
    0이거나 비유한이면 1e-12로 얼버무리지 않고 **NaN**을 반환한다 — 이벤트
    봉의 Open·Close는 항상 양수·유한(아래 참조)이라 이 경로는 실데이터에서
    발동하지 않음을 검증했다.
+8. **VSTD_20/WVMA_20의 ddof (2차 리뷰, qlib 원본 재구현으로 확인)**:
+   qlib의 `Std` 연산자는 `series.rolling(N, min_periods=1).std()`이고
+   pandas `.std()`의 기본은 **ddof=1**(표본표준편차)이다. 이전 구현은
+   `np.nanstd`(기본 ddof=0, 모표준편차)를 썼다 — 398개 정상봉 이벤트
+   기준 최대 절대오차 VSTD_20=0.0717, WVMA_20=0.111(둘 다 ddof=0
+   재구성과 정확히 일치해 원인이 확인됨), 대략 sqrt(d/(d-1))≈2.6%의
+   체계적 과소추정이었다. `_sample_std()` 헬퍼로 두 피처의 분자만
+   ddof=1로 바꿨다(Mean() 항은 ddof가 적용되지 않으므로 그대로).
 
 NaN(거래정지 봉) 처리 방침
 --------------------------
@@ -67,9 +76,11 @@ sources.py 참조). 20봉 롤링 창에 정지봉이 섞이는 것은 일상적�
    발생하지 않는다.
 2. Close는 정지봉에서도 NaN이 아니므로(직전값 유지), Close만 쓰는 계산은
    원래도 NaN에 덜 노출된다. 그래도 방어적으로 nan-safe 버전을 쓴다.
-3. High/Low/Volume을 쓰는 계산은 np.nanmin/np.nanmax/np.nanstd/np.nanmean/
+3. High/Low/Volume을 쓰는 계산은 np.nanmin/np.nanmax/np.nanmean/
    np.nanargmax로 바꾸거나, 상관·회귀처럼 두 배열을 함께 쓰는 경우는
-   두 배열 모두 유한한 위치만 골라 마스킹한 뒤 계산한다.
+   두 배열 모두 유한한 위치만 골라 마스킹한 뒤 계산한다. 표준편차만은
+   `np.nanstd`(ddof=0)가 아니라 `_sample_std`(ddof=1, qlib과 동일)를
+   쓴다 — 8번 항목 참조.
 4. RSV_20은 과거 버그(정지봉 Low=0)가 정확히 이 피처를 오염시켰던 지점이다.
    지금은 정지봉이 Low=0이 아니라 NaN이라 원인은 다르지만, 창 안의 결측을
    min/max에서 제대로 걸러내지 않으면 같은 방식으로 재발한다. nanmin/
@@ -152,6 +163,36 @@ def _safe(x: float) -> float:
     return float(x) if np.isfinite(x) else 0.0
 
 
+def _sample_std(arr: np.ndarray) -> float:
+    """qlib의 Std 연산자(`series.rolling(N, min_periods=1).std()`)와 일치하는
+    표본표준편차(ddof=1)를, NaN(정지봉)을 걸러낸 유효값만으로 계산한다.
+
+    pandas의 기본 `.std()`는 ddof=1(표본표준편차)이다. 이전 구현은
+    `np.nanstd`(기본 ddof=0, 모표준편차)를 써서 VSTD_20/WVMA_20이 qlib
+    대비 체계적으로 약 sqrt(d/(d-1))약2.6% 과소추정됐다(2026-08-28 리뷰,
+    398개 정상봉 이벤트 기준 최대 절대오차 VSTD_20=0.0717,
+    WVMA_20=0.111 - 둘 다 ddof=0 재구성과 정확히 일치해 원인이 확인됨).
+    이 헬퍼로 두 피처의 분자(표준편차)만 고친다 - Mean() 항은 ddof가
+    적용되지 않으므로 그대로 둔다.
+
+    유효값이 2개 미만이면 ddof=1 표준편차가 수학적으로 정의되지 않는다
+    (분산의 분모 n-1=0). qlib 자신도 `rolling(N, min_periods=1).std()`가
+    관측치 1개짜리 창에서 NaN을 반환한다 - 그 관례를 그대로 따라 여기서도
+    NaN을 반환한다(np.nanstd(arr, ddof=1)을 유효값 1개에 직접 쓰면 같은
+    NaN이 나오지만 "Degrees of freedom <= 0" RuntimeWarning이 함께
+    발생하므로, 미리 걸러 명시적으로 NaN을 반환해 경고 없이 같은 결과를
+    낸다 - F2의 gap_vol_20d와 같은 관례). 이 NaN은 호출부에서 `_safe()`를
+    거쳐 0.0으로 접힌다 - CORR_20/RSQR_20/CORD_20의 "표준편차 0" 분기와
+    동일하게, qlib의 NaN 관례에서 의도적으로 벗어난 것이다(리포트 참조).
+    실측(28,402개 이벤트)에서는 이벤트 봉 i가 항상 유효해 유효값이 2개
+    미만인 창이 한 번도 나오지 않았다 - 아래 검증에서 확인한다.
+    """
+    valid = arr[np.isfinite(arr)]
+    if valid.size >= 2:
+        return float(valid.std(ddof=1))
+    return float("nan")
+
+
 def compute_f3(df: pd.DataFrame, i: int) -> dict:
     """봉 i의 F3 피처 20개 (KBAR 9 + 롤링 11, 창 20).
 
@@ -229,9 +270,9 @@ def compute_f3(df: pd.DataFrame, i: int) -> dict:
     qtlu = qtlu_raw / c if (np.isfinite(c) and c != 0.0) else float("nan")
 
     # VSTD = Std($volume, d) / ($volume + 1e-12) — 분모는 "오늘"의
-    # 거래량이지 창 평균이 아니다. 분자(창 표준편차)는 nanstd로 부분
-    # 결측을 방어한다.
-    vstd = np.nanstd(vol_d) / (v_today + EPS)
+    # 거래량이지 창 평균이 아니다. 분자(창 표준편차)는 qlib과 동일하게
+    # 표본표준편차(ddof=1)를 쓰고, NaN(정지봉)은 _sample_std가 걸러낸다.
+    vstd = _sample_std(vol_d) / (v_today + EPS)
 
     # --- "d+1 창": 차분(Ref 시프트) 기반 피처 --------------------------
     lo_e = max(0, i - d)
@@ -264,10 +305,11 @@ def compute_f3(df: pd.DataFrame, i: int) -> dict:
 
     # WVMA = Std(Abs(ret)*volume, d) / (Mean(Abs(ret)*volume, d) + 1e-12).
     # 분자·분모 둘 다 절대수익률을 쓴다(qlib 원식) — 부호 있는 수익률을
-    # 섞지 않는다.
+    # 섞지 않는다. 분자(표준편차)는 qlib과 동일하게 ddof=1을 쓴다(분모의
+    # Mean()은 ddof가 적용되지 않으므로 nanmean 그대로).
     prod_abs = np.abs(price_ret) * vol_e[1:]
     if prod_abs.size and np.isfinite(prod_abs).any():
-        wvma = np.nanstd(prod_abs) / (np.nanmean(prod_abs) + EPS)
+        wvma = _sample_std(prod_abs) / (np.nanmean(prod_abs) + EPS)
     else:
         wvma = 0.0
 

@@ -176,11 +176,51 @@ def test_VSTD_20_분모는_오늘_거래량이고_창_평균이_아니다():
     df, i = synth_from_closes(np.full(n, 100.0), vols=vols)
     out = features_f3.compute_f3(df, i)
     vol_window = vols[-20:]
-    expected = vol_window.std() / (5000.0 + 1e-12)  # 분모=오늘(5000), 창 평균(1200)이 아님
+    # qlib의 Std는 표본표준편차(ddof=1) — pandas .std() 기본값과 동일.
+    expected = vol_window.std(ddof=1) / (5000.0 + 1e-12)  # 분모=오늘(5000), 창 평균(1200)이 아님
     assert out["VSTD_20"] == pytest.approx(expected)
     # 창 평균으로 나눈 (틀린) 값과는 뚜렷이 달라야 한다
-    wrong = vol_window.std() / (vol_window.mean() + 1e-12)
-    assert out["VSTD_20"] != pytest.approx(wrong)
+    wrong_mean_denom = vol_window.std(ddof=1) / (vol_window.mean() + 1e-12)
+    assert out["VSTD_20"] != pytest.approx(wrong_mean_denom)
+    # ddof=0(모표준편차, 이전 구현)과도 뚜렷이 달라야 한다 — 약 sqrt(20/19)배 차이
+    wrong_ddof0 = vol_window.std(ddof=0) / (5000.0 + 1e-12)
+    assert out["VSTD_20"] != pytest.approx(wrong_ddof0)
+
+
+def test_VSTD_20_ddof1_표본표준편차_수기검산():
+    # 4개짜리 초소형 창으로 사람이 손으로 검산 가능하게 만든다.
+    # 거래량 [10,20,30,40]: 평균=25, 편차제곱합=15^2+5^2+5^2+15^2=500.
+    # 표본분산(ddof=1)=500/(4-1)=166.6666..., 표본표준편차=sqrt(166.6666...)
+    # 모표준편차(ddof=0)라면 500/4=125, sqrt(125)=11.1803... — 서로 다르다.
+    closes = np.full(4, 100.0)
+    vols = np.array([10.0, 20.0, 30.0, 40.0])
+    df, i = synth_from_closes(closes, vols=vols)  # i=3(오늘), 창 전체가 4봉
+    out = features_f3.compute_f3(df, i)
+
+    sample_var = 500.0 / 3.0
+    expected = (sample_var ** 0.5) / (40.0 + 1e-12)
+    assert out["VSTD_20"] == pytest.approx(expected)
+
+    pop_var = 500.0 / 4.0
+    ddof0_value = (pop_var ** 0.5) / (40.0 + 1e-12)
+    assert out["VSTD_20"] != pytest.approx(ddof0_value)
+
+
+def test_VSTD_20_유효관측치가_1개면_0을_반환한다():
+    # 창(오늘 포함 20봉) 중 오늘(i)만 남기고 나머지 19봉을 전부 거래정지로
+    # 만들면, 표준편차 분자의 유효 표본이 1개뿐이라 ddof=1 표준편차가
+    # 정의되지 않는다(qlib도 rolling(min_periods=1).std()에서 관측치
+    # 1개면 NaN을 반환한다). 이 모듈은 그 NaN을 _safe()가 0.0으로 접도록
+    # 두기로 했다(다른 "표준편차 0/미정의" 분기와 일관성을 맞추려는
+    # 의도적 선택 — task-6-report.md 참조). 그 최종 결과(0.0)를 명시적으로
+    # 검증한다.
+    n = 25
+    df, i = trend(n=n)  # i = n-1 = 24, 창(d=20) = 5..24
+    for pos in range(5, 24):  # 오늘(24) 하나만 남기고 전부 정지
+        df.loc[df.index[pos], ["Open", "High", "Low", "Volume"]] = np.nan
+        df.loc[df.index[pos], "Close"] = df["Close"].iloc[pos - 1]
+    out = features_f3.compute_f3(df, i)
+    assert out["VSTD_20"] == pytest.approx(0.0)
 
 
 # --- 중요3: WVMA_20 — 분자·분모 모두 절대수익률 -----------------------------
@@ -196,13 +236,56 @@ def test_WVMA_20_분자도_절대수익률을_쓴다():
     vol_e = vols
     price_ret = (close_e[1:] - close_e[:-1]) / close_e[:-1]
     prod_abs = np.abs(price_ret) * vol_e[1:]
-    expected = np.std(prod_abs) / (np.mean(prod_abs) + 1e-12)
+    # qlib의 Std는 표본표준편차(ddof=1).
+    expected = np.std(prod_abs, ddof=1) / (np.mean(prod_abs) + 1e-12)
     assert out["WVMA_20"] == pytest.approx(expected)
 
     # 분자에 부호를 남겨둔 (틀린) 계산과는 값이 달라야 한다
     prod_signed = price_ret * vol_e[1:]
-    wrong = np.std(prod_signed) / (np.mean(np.abs(prod_signed)) + 1e-12)
-    assert out["WVMA_20"] != pytest.approx(wrong)
+    wrong_signed = np.std(prod_signed, ddof=1) / (np.mean(np.abs(prod_signed)) + 1e-12)
+    assert out["WVMA_20"] != pytest.approx(wrong_signed)
+
+    # ddof=0(모표준편차, 이전 구현)과도 뚜렷이 달라야 한다
+    wrong_ddof0 = np.std(prod_abs, ddof=0) / (np.mean(prod_abs) + 1e-12)
+    assert out["WVMA_20"] != pytest.approx(wrong_ddof0)
+
+
+def test_WVMA_20_ddof1_표본표준편차_수기검산():
+    # 종가 5개(diff 4개)로 사람이 손으로 검산 가능한 최소 창을 만든다.
+    # 종가 [100,110,100,110,100] → 수익률 [0.10,-0.0909...,0.10,-0.0909...]
+    # (절댓값은 [0.10, 0.090909..., 0.10, 0.090909...]).
+    # 거래량 [1,2,3,4,5] → 절대수익률*거래량(d+1창의 diff 4개, 오늘 거래량과
+    # 짝지어짐) = |ret|*vol[1:] = [0.10*2, 0.090909...*3, 0.10*4, 0.090909...*5]
+    #                            = [0.2, 0.272727..., 0.4, 0.454545...]
+    closes = np.array([100.0, 110.0, 100.0, 110.0, 100.0])
+    vols = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+    df, i = synth_from_closes(closes, vols=vols)  # i=4(오늘), d+1창 = 전체 5봉
+    out = features_f3.compute_f3(df, i)
+
+    price_ret = np.diff(closes) / closes[:-1]
+    prod_abs = np.abs(price_ret) * vols[1:]
+    mean_p = prod_abs.mean()
+    sample_var = ((prod_abs - mean_p) ** 2).sum() / (len(prod_abs) - 1)
+    expected = (sample_var ** 0.5) / (mean_p + 1e-12)
+    assert out["WVMA_20"] == pytest.approx(expected)
+
+    pop_var = ((prod_abs - mean_p) ** 2).sum() / len(prod_abs)
+    ddof0_value = (pop_var ** 0.5) / (mean_p + 1e-12)
+    assert out["WVMA_20"] != pytest.approx(ddof0_value)
+
+
+def test_WVMA_20_유효관측치가_1개면_0을_반환한다():
+    # d+1(21봉) 창 중 오늘(i)에서 나오는 diff(=오늘 종가/거래량 대 어제
+    # 종가/거래량) 하나만 남기고, 그 앞의 diff들이 전부 걸리는 거래량을
+    # 정지 처리해 prod_abs의 유효 표본을 1개로 만든다. VSTD_20과 동일한
+    # 이유로 이 모듈은 최종적으로 0.0을 반환한다(_safe()가 NaN을 접음).
+    n = 25
+    df, i = trend(n=n)  # i = n-1 = 24, d+1창 = 4..24(21봉)
+    for pos in range(4, 24):  # 오늘(24) 하나만 남기고 전부 정지
+        df.loc[df.index[pos], ["Open", "High", "Low", "Volume"]] = np.nan
+        df.loc[df.index[pos], "Close"] = df["Close"].iloc[pos - 1]
+    out = features_f3.compute_f3(df, i)
+    assert out["WVMA_20"] == pytest.approx(0.0)
 
 
 # --- 중요4: CORD_20 — 거래량항은 log(V_t/V_{t-1} + 1) ----------------------
