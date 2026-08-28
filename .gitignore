@@ -27,3 +27,6 @@ outputs/*.csv
 # OS
 Thumbs.db
 desktop.ini
+
+# 로그
+logs/

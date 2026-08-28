@@ -64,20 +64,45 @@ def load_existing() -> dict[str, pd.DataFrame]:
 
 
 def krx_codes() -> list[str]:
-    """KRX 전 종목 코드 (보통주 기준, FDR StockListing)."""
+    """KRX 보통주 코드 목록.
+
+    fdr.StockListing('KOSPI'/'KOSDAQ'/'KRX')는 KRX OTP 문제로 이 환경에서 실패한다
+    (기존 웹사이트 프로젝트에서도 확인된 알려진 버그). 그래서:
+      1) HollyKR 로컬 krx_master_*.pkl 로 보통주 판별(스팩·리츠·ETF 제외)
+      2) fdr.StockListing('KRX-DESC') 로 신규 상장을 보완
+    """
     import FinanceDataReader as fdr
 
-    frames = []
-    for market in ("KOSPI", "KOSDAQ"):
+    codes: set[str] = set()
+    excluded: set[str] = set()
+
+    # 1) 로컬 마스터 — is_common/is_spac/is_reit/is_etf 플래그가 있다
+    masters = sorted(HOLLYKR_CACHE.glob("krx_master_*.pkl"))
+    if masters:
         try:
-            frames.append(fdr.StockListing(market))
+            m = pickle.load(open(masters[-1], "rb"))
+            keep = (m["is_common"] & ~m["is_spac"] & ~m["is_reit"] & ~m["is_etf"])
+            codes |= {str(c).zfill(6) for c in m.loc[keep, "종목코드"]}
+            excluded |= {str(c).zfill(6) for c in m.loc[~keep, "종목코드"]}
+            print(f"  로컬 마스터({masters[-1].name}): 보통주 {len(codes)} "
+                  f"· 제외 {len(excluded)}")
         except Exception as e:
-            print(f"  [warn] {market} 목록 실패: {e}")
-    if not frames:
-        return []
-    df = pd.concat(frames, ignore_index=True)
-    col = "Code" if "Code" in df.columns else df.columns[0]
-    return sorted({str(c).zfill(6) for c in df[col].dropna()})
+            print(f"  [warn] 로컬 마스터 실패: {e}")
+
+    # 2) KRX-DESC 로 신규 상장 보완 (마스터에서 이미 제외된 종목은 제외 유지)
+    try:
+        d = fdr.StockListing("KRX-DESC")
+        live = {str(c).zfill(6) for c in d["Code"].dropna()}
+        # 스팩은 종목명으로 한 번 더 거른다
+        spac = {str(r.Code).zfill(6) for r in d.itertuples(index=False)
+                if "스팩" in str(r.Name)}
+        added = (live - excluded - spac) - codes
+        codes |= added
+        print(f"  KRX-DESC: 전체 {len(live)} · 신규 보완 {len(added)}")
+    except Exception as e:
+        print(f"  [warn] KRX-DESC 실패: {e}")
+
+    return sorted(codes)
 
 
 def fetch(code: str, start: str, end: str) -> pd.DataFrame | None:
