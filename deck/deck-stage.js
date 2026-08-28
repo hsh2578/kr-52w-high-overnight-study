@@ -21,7 +21,7 @@
   "use strict";
 
   var CSS = `
-deck-stage{position:fixed;inset:0;display:block;background:#050505;overflow:hidden}
+deck-stage{position:fixed;inset:0;display:block;background:var(--page,#E3E4DD);overflow:hidden}
 deck-stage > section{
   position:absolute;left:0;top:0;transform-origin:top left;
   display:none;overflow:hidden;
@@ -30,16 +30,16 @@ deck-stage > section[data-active]{display:block}
 .ds-bar{
   position:fixed;right:20px;bottom:18px;z-index:9;
   display:flex;align-items:center;gap:6px;
-  font:500 13px/1 'Noto Sans KR',system-ui,sans-serif;color:#8A8A8A;
-  background:rgba(20,20,20,.82);border:1px solid #2A2A2A;border-radius:999px;
+  font:500 13px/1 'Noto Sans KR',system-ui,sans-serif;color:#5A6570;
+  background:rgba(255,255,255,.9);border:1px solid #C9CAC2;border-radius:999px;
   padding:6px 8px;backdrop-filter:blur(6px);opacity:.25;transition:opacity .18s;
 }
 .ds-bar:hover{opacity:1}
 .ds-bar button{
   all:unset;cursor:pointer;padding:5px 10px;border-radius:999px;
-  color:#CFCFCF;font:inherit;
+  color:#2E4053;font:inherit;
 }
-.ds-bar button:hover{background:#262626;color:#fff}
+.ds-bar button:hover{background:#E3E4DD;color:#111}
 .ds-bar button[disabled]{opacity:.3;cursor:default}
 .ds-bar .ds-pos{padding:0 8px;font-variant-numeric:tabular-nums;letter-spacing:.02em}
 

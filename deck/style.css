@@ -1,20 +1,37 @@
-/* FIND-A Sprint 발표 덱 — 참고 PDF의 디자인 언어를 재현한다.
-   검정 배경 · 흰 텍스트 · 블루 액센트 · 좌상단 굵은 제목 + 얇은 구분선. */
+/* FIND-A Sprint 발표 덱 — 라이트 테마.
+ *
+ * 팔레트 출처:
+ *   - 지면 바탕 #F0F1EB · 제목 #383D3D : reveal.js "serif" 테마
+ *     https://revealjs.com/themes/
+ *   - 본문 잉크 #1C2833 · 보조 #2E4053 : "Classic Blue" 팔레트
+ *   - 데이터 액센트 #277884 : "Teal & Coral" 팔레트의 deep teal
+ *     https://www.oreateai.com/blog/exploring-the-palette-of-revealjs-themes-...
+ *
+ * 왜 이 조합인가: 웜 페이퍼 바탕은 빔 프로젝터에서 순백보다 눈부심이 적고,
+ * 네이비 잉크는 순검정보다 대비가 부드러워 장시간 읽기에 낫다. 강조는
+ * 단 하나의 색(teal)으로 통일해 "어디를 봐야 하는지"가 흔들리지 않게 했다.
+ * 손실·경고만 예외로 머루드(#B23A48)를 쓴다.
+ *
+ * 폰트는 기존 그대로 Noto Sans KR을 유지한다.
+ */
 
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
 
 :root {
-  --bg: #0A0A0A;
-  --fg: #FFFFFF;
-  --muted: #9CA3AF;
-  --dim: #6B7280;
-  --accent: #3B82F6;
-  --accent-soft: #60A5FA;
-  --card: #141414;
-  --card-2: #1A1A1A;
-  --line: #2A2A2A;
-  --good: #34D399;
-  --bad: #F87171;
+  --bg: #F0F1EB;          /* reveal.js serif 바탕 */
+  --page: #E3E4DD;        /* 무대 여백(레터박스) — 지면보다 한 단계 어둡게 */
+  --ink: #1C2833;         /* 본문 */
+  --fg: #1C2833;          /* 기존 변수명 호환 */
+  --muted: #46586B;
+  --dim: #8A9199;
+  --accent: #1D6270;      /* 강조 (deep teal) */
+  --accent-soft: #277884;
+  --card: #FFFFFF;
+  --card-hi: #E9F0F1;     /* 강조 카드 — teal의 아주 옅은 톤 */
+  --line: #D6D7CF;
+  --line-soft: #E6E7E0;
+  --good: #2F7D53;
+  --bad: #B23A48;
   --slide-w: 1600px;
   --slide-h: 900px;
 }
@@ -22,8 +39,8 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  background: #050505;
-  color: var(--fg);
+  background: var(--page);
+  color: var(--ink);
   font-family: 'Noto Sans KR', 'Pretendard', 'Malgun Gothic', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   margin: 0;
@@ -42,11 +59,12 @@ body {
 
 .slide-num {
   position: absolute; right: 40px; bottom: 28px;
-  font-size: 16px; color: #3A3A3A; letter-spacing: .04em;
+  font-size: 16px; color: var(--dim); letter-spacing: .06em;
 }
 
 h1.title {
   font-size: 52px; font-weight: 900; letter-spacing: -.02em; line-height: 1.15;
+  color: #383D3D;
 }
 .rule { height: 1px; background: var(--line); margin: 26px 0 40px; }
 
@@ -54,7 +72,7 @@ h1.title {
 .sub  { font-size: 19px; color: var(--muted); line-height: 1.65; font-weight: 400; }
 .tiny { font-size: 16px; color: var(--dim); line-height: 1.6; }
 
-.accent { color: var(--accent-soft); }
+.accent { color: var(--accent); }
 .good { color: var(--good); }
 .bad { color: var(--bad); }
 strong { font-weight: 700; }
@@ -62,10 +80,15 @@ strong { font-weight: 700; }
 /* --- 카드 --- */
 .card {
   background: var(--card); border: 1px solid var(--line);
-  border-radius: 14px; padding: 26px 30px;
+  border-radius: 10px; padding: 26px 30px;
 }
-.card.hi { border-color: var(--accent); background: #0E1626; }
-.card h3 { font-size: 21px; font-weight: 700; margin-bottom: 12px; }
+/* 강조 카드: 위쪽에 액센트 띠를 둘러 '여기가 결론'임을 색 하나로 말한다. */
+.card.hi {
+  background: var(--card-hi);
+  border-color: #BFD3D6;
+  border-top: 3px solid var(--accent);
+}
+.card h3 { font-size: 21px; font-weight: 700; margin-bottom: 12px; color: #383D3D; }
 .card p  { font-size: 17px; color: var(--muted); line-height: 1.6; }
 
 .grid { display: grid; gap: 22px; }
@@ -78,17 +101,19 @@ strong { font-weight: 700; }
 .stat { flex: 1; padding: 0 40px; }
 .stat:first-child { padding-left: 0; }
 .stat + .stat { border-left: 1px solid var(--line); }
-.stat .v { font-size: 54px; font-weight: 900; letter-spacing: -.02em; line-height: 1.1; }
+.stat .v { font-size: 54px; font-weight: 900; letter-spacing: -.02em;
+           line-height: 1.1; color: #383D3D; }
 .stat .v.sm { font-size: 40px; }
 .stat .k { font-size: 16px; color: var(--dim); margin-top: 10px; }
 
 /* --- 단계 흐름 (01 → 02 → 03) --- */
 .flow { display: flex; align-items: stretch; gap: 16px; }
 .step { flex: 1; background: var(--card); border: 1px solid var(--line);
-        border-radius: 14px; padding: 22px 24px; }
-.step.hi { border-color: var(--accent); background: #0E1626; }
+        border-radius: 10px; padding: 22px 24px; }
+.step.hi { background: var(--card-hi); border-color: #BFD3D6;
+           border-top: 3px solid var(--accent); }
 .step .n { font-size: 16px; font-weight: 700; color: var(--accent); letter-spacing: .1em; }
-.step h4 { font-size: 20px; font-weight: 700; margin: 8px 0 10px; }
+.step h4 { font-size: 20px; font-weight: 700; margin: 8px 0 10px; color: #383D3D; }
 .step p { font-size: 16px; color: var(--muted); line-height: 1.55; }
 .arrow { align-self: center; color: var(--accent); font-size: 26px; flex: none; }
 
@@ -97,11 +122,11 @@ table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 13px 16px; font-size: 18px; }
 th { font-size: 16px; color: var(--dim); font-weight: 500;
      border-bottom: 1px solid var(--line); letter-spacing: .02em; }
-td { border-bottom: 1px solid #1C1C1C; }
+td { border-bottom: 1px solid var(--line-soft); }
 tbody tr:last-child td { border-bottom: none; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-tr.hl td { background: #0E1626; font-weight: 700; }
-tr.hl td:first-child { border-left: 2px solid var(--accent); }
+tr.hl td { background: var(--card-hi); font-weight: 700; }
+tr.hl td:first-child { border-left: 3px solid var(--accent); }
 tr.dim td { color: var(--dim); }
 
 /* 표가 두 개 이상 들어가 판면을 넘기는 슬라이드용. 글자 크기는 그대로 두고
@@ -116,21 +141,21 @@ ul.bul li { position: relative; padding-left: 22px; margin-bottom: 15px;
             font-size: 19px; color: var(--muted); line-height: 1.6; }
 ul.bul li::before { content: ''; position: absolute; left: 0; top: 11px;
             width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
-ul.bul li b { color: var(--fg); font-weight: 700; }
+ul.bul li b { color: var(--ink); font-weight: 700; }
 
 /* --- 배지 --- */
 .badge { display: inline-block; font-size: 16px; font-weight: 700;
-         padding: 5px 12px; border-radius: 999px; letter-spacing: .02em; }
-.badge.b { background: rgba(59,130,246,.16); color: var(--accent-soft); }
-.badge.g { background: rgba(52,211,153,.14); color: var(--good); }
-.badge.r { background: rgba(248,113,113,.14); color: var(--bad); }
+         padding: 5px 12px; border-radius: 4px; letter-spacing: .02em; }
+.badge.b { background: rgba(29,98,112,.12); color: var(--accent); }
+.badge.g { background: rgba(47,125,83,.13); color: var(--good); }
+.badge.r { background: rgba(178,58,72,.12); color: var(--bad); }
 
 /* --- 이미지 --- */
 img.fig { width: 100%; height: 100%; object-fit: contain;
-          background: #fff; border-radius: 10px; }
+          background: #fff; border-radius: 8px; }
 
-.eyebrow { font-size: 16px; font-weight: 700; color: var(--accent);
-           letter-spacing: .12em; margin-bottom: 14px; }
+.eyebrow { font-size: 15px; font-weight: 700; color: var(--accent);
+           letter-spacing: .16em; margin-bottom: 14px; }
 
 /* 인쇄(PDF 내보내기) 규칙은 deck-stage.js가 갖고 있다. 여기에 또 두면
    두 벌이 어긋날 때 어느 쪽이 이기는지 알 수 없게 된다. */

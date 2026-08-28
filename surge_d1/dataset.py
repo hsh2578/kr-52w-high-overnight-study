@@ -15,7 +15,7 @@ import time
 import pandas as pd
 
 from surge_d1 import (config, events, features_f1, features_f2,
-                      features_f3, features_f4, features_f5, sources)
+                      features_f3, features_f4, features_f5, features_f6, sources)
 
 FEATURE_SETS = {
     "M1": list(features_f1.F1_NAMES),
@@ -25,16 +25,19 @@ FEATURE_SETS = {
 }
 FEATURE_SETS["M4"] = FEATURE_SETS["M3"] + list(features_f5.F5_NAMES)   # +수급
 FEATURE_SETS["M5"] = FEATURE_SETS["M4"] + list(features_f4.F4_NAMES)   # +재료
+# 급등주 연구 전용 사다리: M4에 F6(거래대금·저항선·과열도)을 더한다.
+FEATURE_SETS["M6"] = FEATURE_SETS["M4"] + list(features_f6.F6_NAMES)
+FEATURE_SETS["M7"] = FEATURE_SETS["M6"] + list(features_f4.F4_NAMES)   # +재료
 
 # parquet에 미리 계산해 둘 피처. F4(재료)는 폴드별 point-in-time 생성이라 제외한다.
-BASE_FEATURES = FEATURE_SETS["M4"]
+BASE_FEATURES = FEATURE_SETS["M6"]
 
 # 절대 피처가 되면 안 되는 컬럼 (라벨과 그 파생, 식별자). dataset이 이 검사를
 # 직접 수행한다 — d1은 재료 CSV의 익일 수익률(=라벨과 사실상 동의어)이라
 # Task 11이 CatalystIndex를 fit할 때는 쓰지만 피처 목록에는 절대 들어가면
 # 안 된다.
-BANNED_AS_FEATURE = {"d1", "y_raw", "y_hold", "y_hold20", "y_mkt", "y_cls",
-                     "y_up", "close", "i", "date", "code"}
+BANNED_AS_FEATURE = {"d1", "y_raw", "y_hold", "y_hold20", "y_exit", "y_mkt",
+                     "y_cls", "y_up", "close", "i", "date", "code"}
 
 
 def add_sample_weight(df: pd.DataFrame) -> pd.DataFrame:
@@ -64,7 +67,16 @@ def build_dataset() -> pd.DataFrame:
     ohlcv = sources.load_ohlcv()
     market = sources.build_market_index(ohlcv)
     inv = features_f5.load_investor()
-    ev = events.collect_events(ohlcv, exclude=events.load_excluded_codes())
+    excl = events.load_excluded_codes()
+
+    if config.EVENT_MODE == "surge":
+        ev = events.collect_surge_events(
+            ohlcv, sources.load_list_shares(), exclude=excl)
+    elif config.EVENT_MODE == "high52":
+        ev = events.collect_events(ohlcv, exclude=excl)
+    else:
+        raise ValueError(f"EVENT_MODE는 'surge' 또는 'high52': {config.EVENT_MODE!r}")
+    print(f"이벤트 {len(ev):,}건 (mode={config.EVENT_MODE}, exit={config.EXIT})")
     ev = events.add_market_adjusted(ev)
 
     rows = []
@@ -78,6 +90,7 @@ def build_dataset() -> pd.DataFrame:
         feat.update(features_f2.compute_f2(df, i, market))
         feat.update(features_f3.compute_f3(df, i))
         feat.update(features_f5.compute_f5(inv.get(r.code), r.date))
+        feat.update(features_f6.compute_f6(df, i))
         rows.append(feat)
         if n % 5000 == 0 or n == n_total:
             print(f"  피처 {n}/{n_total} · {time.time()-t0:.0f}s", flush=True)
@@ -89,7 +102,35 @@ def build_dataset() -> pd.DataFrame:
     out = features_f4.attach_catalyst(out, cat)
     out = add_sample_weight(out)
 
+    # 데이터셋에 '어떤 설정으로 만들었는지'를 새겨 둔다. load_dataset이 현재
+    # 설정과 대조해 다르면 즉시 실패시킨다 — 라벨의 뜻이 조용히 달라진 채로
+    # 학습·평가가 진행되는 것이 이 파이프라인에서 가장 위험한 실패다.
+    out["_event_mode"] = config.EVENT_MODE
+    out["_exit"] = config.EXIT
     return out
+
+
+def load_dataset(path=None) -> pd.DataFrame:
+    """데이터셋을 읽고 **현재 설정과 일치하는지 검사한다.**
+
+    왜 검사하는가: `y_exit`/`y_cls`의 의미는 config.EXIT에 따라 달라진다.
+    설정을 바꾼 뒤 옛 parquet을 그대로 읽으면, 이름은 같은데 뜻이 다른 라벨로
+    학습하게 되고 결과는 조용히 틀린다. 다른 저장소에서 실제로 그 유형의
+    버그(학습 50봉 / 추론 20봉)를 확인했으므로, 여기서는 예외로 드러낸다.
+    """
+    df = pd.read_parquet(config.DATASET_PATH if path is None else path)
+    for col, want, name in (("_event_mode", config.EVENT_MODE, "EVENT_MODE"),
+                            ("_exit", config.EXIT, "EXIT")):
+        if col not in df.columns:
+            raise ValueError(
+                f"데이터셋에 {col}가 없다 — config 변경 전에 만든 옛 파일이다. "
+                "python -m surge_d1.dataset 로 다시 만들어라.")
+        got = str(df[col].iloc[0])
+        if got != want:
+            raise ValueError(
+                f"{name} 불일치: 데이터셋은 {got!r}로 만들어졌는데 현재 설정은 "
+                f"{want!r}이다. 설정을 되돌리거나 데이터셋을 다시 만들어라.")
+    return df
 
 
 def main() -> int:

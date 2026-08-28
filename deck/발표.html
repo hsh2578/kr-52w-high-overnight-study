@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>52주 신고가 돌파 종목의 익일 초과수익 — FIND-A TEAM Beta</title>
-<link rel="stylesheet" href="style.css?v=1787934627">
+<link rel="stylesheet" href="style.css?v=1787941339">
 <script src="deck-stage.js"></script>
 </head>
 <body>
@@ -14,9 +14,9 @@
     <div>
       <div style="display:flex;align-items:center;gap:26px">
         <div style="font-size:52px;font-weight:900;letter-spacing:-.03em">FIND-A</div>
-        <div style="width:1px;height:64px;background:#3A3A3A"></div>
+        <div style="width:1px;height:64px;background:var(--line)"></div>
         <div style="font-size:16px;line-height:1.7;color:var(--muted)">
-          대학연합<br>금융데이터분석학회<br><b style="color:#fff">파인드알파</b>
+          대학연합<br>금융데이터분석학회<br><b style="color:var(--ink)">파인드알파</b>
         </div>
       </div>
       <div style="font-size:12px;letter-spacing:.42em;color:var(--dim);margin-top:10px">
@@ -99,7 +99,7 @@
 
   <div class="card hi">
     <h3>그래서 이 연구의 질문</h3>
-    <p style="font-size:22px;color:#fff;font-weight:700;line-height:1.5">
+    <p style="font-size:22px;color:var(--ink);font-weight:700;line-height:1.5">
       52주 신고가를 돌파한 종목은 매일 수십 개씩 나온다.
       그중 <span class="accent">내일 더 오를 종목을 골라낼 수 있는가?</span>
       — 그리고 그 선별은 <span class="accent">단순한 규칙보다 나은가?</span>
@@ -116,11 +116,11 @@
     <div class="card hi">
       <h3>채택 — 익일 시가 청산</h3>
       <p style="font-size:19px;line-height:1.65">
-        돌파일 <b style="color:#fff">종가에 매수</b> →
-        <b style="color:#fff">익일 시가에 매도</b>.<br><br>
+        돌파일 <b style="color:var(--ink)">종가에 매수</b> →
+        <b style="color:var(--ink)">익일 시가에 매도</b>.<br><br>
         하룻밤만 노출되므로 진입·청산 시점이 명확하고,
         누구나 같은 규칙으로 재현할 수 있다.
-        오버나이트 갭은 <b style="color:#fff">실제로 체결 가능한</b> 구간이다.
+        오버나이트 갭은 <b style="color:var(--ink)">실제로 체결 가능한</b> 구간이다.
       </p>
     </div>
     <div class="card">
@@ -142,10 +142,10 @@
       <span class="accent">거래비용 0.21%</span>
     </div>
     <p style="font-size:18px">
-      <b style="color:#fff">비용을 라벨에 미리 차감한 것이 핵심이다.</b>
+      <b style="color:var(--ink)">비용을 라벨에 미리 차감한 것이 핵심이다.</b>
       0.1% 오른 거래는 비용을 못 이겨 실제로는 손실이다. 비용을 빼지 않고
       "상승 확률"을 재면 이길 수 없는 거래를 성공으로 세게 된다.
-      그래서 이 연구가 예측하는 것은 <b style="color:#fff">'오르는가'가 아니라
+      그래서 이 연구가 예측하는 것은 <b style="color:var(--ink)">'오르는가'가 아니라
       '비용을 제하고도 남는가'</b>이다.
     </p>
   </div>
@@ -165,20 +165,20 @@
     <div class="card">
       <div class="badge b">조건 1</div>
       <h3 style="margin-top:14px">252봉 신고가 경신</h3>
-      <p>당일 종가가 직전 <b style="color:#fff">252거래일</b> 최고 종가를 넘을 것.
+      <p>당일 종가가 직전 <b style="color:var(--ink)">252거래일</b> 최고 종가를 넘을 것.
          252일 = 1년치 거래일이라 "52주"의 정확한 정의다.</p>
     </div>
     <div class="card">
       <div class="badge b">조건 2</div>
-      <h3 style="margin-top:14px">거래량 <b style="color:#fff">50일 평균의 1.5배</b> 이상</h3>
+      <h3 style="margin-top:14px">거래량 <b style="color:var(--ink)">50일 평균의 1.5배</b> 이상</h3>
       <p>거래량 없는 신고가는 매물 소진이 아니라 호가 공백일 수 있다.
          수급이 실제로 들어온 돌파만 남긴다.</p>
     </div>
     <div class="card">
       <div class="badge b">조건 3</div>
-      <h3 style="margin-top:14px">당일 거래대금 <b style="color:#fff">100억</b> 이상</h3>
+      <h3 style="margin-top:14px">당일 거래대금 <b style="color:var(--ink)">100억</b> 이상</h3>
       <p>체결 불가능한 종목을 연구 대상에 넣으면 백테스트가 거짓말이 된다.
-         이 조건이 <b style="color:#fff">전체 돌파의 33.6%를 거른다</b>
+         이 조건이 <b style="color:var(--ink)">전체 돌파의 33.6%를 거른다</b>
          (35,647 → 23,654건).</p>
     </div>
   </div>
@@ -198,15 +198,15 @@
     <div class="card hi">
       <h3>유동성 하한이 무엇을 사는가</h3>
       <p style="font-size:17px;line-height:1.65">
-        거래대금 100억 미만으로 잘려나간 <b style="color:#fff">11,993건</b>도
-        알파 자체는 있다 — 평균 <b style="color:#fff">+0.489%(t=15.02)</b>로
+        거래대금 100억 미만으로 잘려나간 <b style="color:var(--ink)">11,993건</b>도
+        알파 자체는 있다 — 평균 <b style="color:var(--ink)">+0.489%(t=15.02)</b>로
         남은 집단(+0.475%)보다 오히려 높다.
       </p>
       <p style="font-size:17px;line-height:1.65;margin-top:12px">
-        <b style="color:#fff">그럼에도 버리는 이유는 체결이다.</b>
+        <b style="color:var(--ink)">그럼에도 버리는 이유는 체결이다.</b>
         조건 없는 돌파의 거래대금 하위 10%는 12억에 불과해, 종가 매수·시가
         매도가 그대로 체결된다고 가정할 수 없다. 이 필터는
-        <b style="color:#fff">수익률을 조금 포기하고 거래 가능성을 사는</b>
+        <b style="color:var(--ink)">수익률을 조금 포기하고 거래 가능성을 사는</b>
         교환이며, 그 대가를 숨기지 않고 밝힌다.
       </p>
     </div>
@@ -243,7 +243,7 @@
         주식예탁증권 10 · 인프라투융자 2
       </p>
       <p style="margin-top:14px;font-size:18px">
-        <b style="color:#fff">지수 추종 ETP는 상승장에서 신고가를 계속 갱신한다.</b>
+        <b style="color:var(--ink)">지수 추종 ETP는 상승장에서 신고가를 계속 갱신한다.</b>
         개별 기업의 재료가 존재하지 않고, 갭이 기초지수(해외 ETF면 미국 시장)에
         좌우된다. 개별주 연구에 섞이면 연구 대상 자체가 달라진다.
       </p>
@@ -251,14 +251,14 @@
     <div class="card hi">
       <h3>이 결정을 정직하게 보고한다</h3>
       <p style="font-size:18px;line-height:1.7">
-        정제는 헤드라인을 <b style="color:#fff">+0.402% → +0.4747%로
+        정제는 헤드라인을 <b style="color:var(--ink)">+0.402% → +0.4747%로
         개선시켰다.</b> 데이터를 본 뒤 내린 결정이 결과를 좋게 만들었으므로
         가장 엄격히 검증되어야 할 지점이다.
       </p>
       <p style="margin-top:14px;font-size:18px;line-height:1.7">
-        방어 근거 — 제외 기준이 <b style="color:#fff">사후 성과가 아니라
+        방어 근거 — 제외 기준이 <b style="color:var(--ink)">사후 성과가 아니라
         KRX가 부여한 증권 종류</b>이고, 제외된 집단은
-        <b style="color:#fff">t=0.95로 애초에 엣지가 없다.</b>
+        <b style="color:var(--ink)">t=0.95로 애초에 엣지가 없다.</b>
         성과가 나쁜 것을 골라 버린 게 아니라 다른 자산군을 분리한 것이다.
       </p>
     </div>
@@ -308,9 +308,9 @@
       <ul class="bul" style="margin-top:6px">
         <li><b>거래정지봉(전체의 1.61%)</b> — 원본이 O/H/L/V를 0으로 채운다.
             0을 그대로 두면 20봉 창에 하나만 섞여도
-            <span style="color:#fff">RSV·ATR 계산이 붕괴</span>한다. 전부 NaN 처리.</li>
+            <span style="color:var(--ink)">RSV·ATR 계산이 붕괴</span>한다. 전부 NaN 처리.</li>
         <li><b>OHLC 불변식 위반 9,183건(0.208%)</b> — High &lt; max(Open, Close).
-            80.5%가 정확히 1원 차이인 <span style="color:#fff">수정주가 반올림
+            80.5%가 정확히 1원 차이인 <span style="color:var(--ink)">수정주가 반올림
             아티팩트</span>였다. 복구 전 마감강도가 1.0을 넘는 이벤트 89건 → 복구 후 0건.</li>
       </ul>
     </div>
@@ -318,7 +318,7 @@
 
   <div class="card hi">
     <p style="font-size:19px;line-height:1.6">
-      <b style="color:#fff">이 정제들은 이벤트 수도 라벨 평균도 바꾸지 않는다.</b>
+      <b style="color:var(--ink)">이 정제들은 이벤트 수도 라벨 평균도 바꾸지 않는다.</b>
       피처 품질만 고친 것이다 — 결과를 좋게 만들려는 조정과 구분하기 위해,
       각 결정이 헤드라인을 얼마나 움직였는지 별도 문서로 기록했다.
     </p>
@@ -339,7 +339,7 @@
     <div class="card" style="padding:20px 22px">
       <div class="badge b">F1 · 14개</div>
       <h3 style="margin-top:12px;font-size:19px">돌파 구조</h3>
-      <p style="font-size:16px">돌파폭 · 거래량배수 · <b style="color:#fff">마감강도</b> ·
+      <p style="font-size:16px">돌파폭 · 거래량배수 · <b style="color:var(--ink)">마감강도</b> ·
         베이스 길이 · 변동성 수축 · 200일선 기울기 · 52주 저점 대비 위치</p>
       <p style="font-size:16px;color:var(--dim);margin-top:10px">
         <b style="color:var(--muted)">왜:</b> 돌파의 '질'을 나타내는 값들.
@@ -379,9 +379,9 @@
     <h3>누수를 막기 위해 실제로 한 일</h3>
     <p style="font-size:18px;line-height:1.65">
       F4의 유사사례 평균수익은 학습 폴드로 적합한 뒤 그 폴드 행을 조회하면
-      <b style="color:#fff">자기 자신을 유사도 1.0의 최근접 사례로 찾아
+      <b style="color:var(--ink)">자기 자신을 유사도 1.0의 최근접 사례로 찾아
       정답을 그대로 읽어온다.</b> 학습 폴드 1,281행 중 939행(73.3%)이 해당됐다.
-      쿼리 행을 명시적으로 배제했다 — <b style="color:#fff">이 수정은 성능을
+      쿼리 행을 명시적으로 배제했다 — <b style="color:var(--ink)">이 수정은 성능을
       낮추는 방향</b>이지만 방법론의 정직성 문제이므로 적용했다.
     </p>
   </div>
@@ -409,13 +409,13 @@
       <h3>검증 — walk-forward + 임베고</h3>
       <p style="font-size:18px;line-height:1.7">
         2023 · 2024 · 2025 · 2026을 각각 검정 연도로 두고,
-        <b style="color:#fff">그 이전 데이터로만</b> 학습하는 4개 폴드.
-        학습 끝과 검정 시작 사이에 <b style="color:#fff">5거래일 임베고</b>를
+        <b style="color:var(--ink)">그 이전 데이터로만</b> 학습하는 4개 폴드.
+        학습 끝과 검정 시작 사이에 <b style="color:var(--ink)">5거래일 임베고</b>를
         둬서 라벨 기간이 겹치지 않게 한다.
       </p>
       <p style="font-size:18px;line-height:1.7;margin-top:14px">
         하루에 이벤트가 몰리면 그날이 과대대표되므로,
-        <b style="color:#fff">1/(그날 이벤트 수)</b>로 표본 가중치를 준다.
+        <b style="color:var(--ink)">1/(그날 이벤트 수)</b>로 표본 가중치를 준다.
       </p>
     </div>
   </div>
@@ -436,7 +436,7 @@
         <div style="font-size:44px;font-weight:900;color:var(--bad)">+0.0359</div>
         <p style="font-size:17px;color:var(--muted);margin-top:8px;line-height:1.6">
           셔플 K-fold가 부풀리는 AUC. 미래 데이터가 학습에 섞여 들어간
-          결과이며, <b style="color:#fff">방향이 예상과 일치</b>한다.
+          결과이며, <b style="color:var(--ink)">방향이 예상과 일치</b>한다.
           시계열에서 무작위 분할은 성능을 만들어낸다.
         </p>
       </div>
@@ -471,21 +471,21 @@
       <p style="font-size:18px;line-height:1.7">
         시장 전체가 종가→익일시가 구간에서 평균적으로 오른다
         (오버나이트 드리프트). 이걸 빼지 않으면
-        <b style="color:#fff">시장을 사기만 해도 얻는 수익을
+        <b style="color:var(--ink)">시장을 사기만 해도 얻는 수익을
         전략의 성과로 착각</b>하게 된다.
       </p>
       <p style="font-size:18px;line-height:1.7;margin-top:14px">
-        시장 조정 후에도 <b style="color:#fff">t = 8.81</b>로
+        시장 조정 후에도 <b style="color:var(--ink)">t = 8.81</b>로
         초과수익은 남는다. 그러나 크기는 절반이다.
       </p>
     </div>
     <div class="card hi">
       <h3>여기서 진짜 문제가 시작된다</h3>
       <p style="font-size:19px;line-height:1.7">
-        평균 +0.47%는 <b style="color:#fff">전체 23,654건을 다 샀을 때</b>의 값이고,
-        순이익 확률은 <b style="color:#fff">44.6%로 절반도 안 된다.</b>
+        평균 +0.47%는 <b style="color:var(--ink)">전체 23,654건을 다 샀을 때</b>의 값이고,
+        순이익 확률은 <b style="color:var(--ink)">44.6%로 절반도 안 된다.</b>
       </p>
-      <p style="font-size:19px;line-height:1.7;margin-top:14px;color:#fff;font-weight:700">
+      <p style="font-size:19px;line-height:1.7;margin-top:14px;color:var(--ink);font-weight:700">
         아무 돌파나 사는 것은 좋은 전략이 아니다.<br>
         <span class="accent">골라낼 수 있어야 한다.</span>
       </p>
@@ -504,12 +504,12 @@
       <h3>발견 → 원인</h3>
       <p style="font-size:17px;line-height:1.6">
         예측 CLI가 오늘자 종목에 <b style="color:var(--bad)">"익일 순이익 확률 89.0%"</b>를
-        찍었다. 검정 구간에서 그 수준의 <b style="color:#fff">실제 빈도는 60%대</b>였다.
+        찍었다. 검정 구간에서 그 수준의 <b style="color:var(--ink)">실제 빈도는 60%대</b>였다.
       </p>
       <p style="font-size:17px;line-height:1.6;margin-top:14px">
-        확률 보정(isotonic)을 <b style="color:#fff">모델이 이미 외운 학습 예측</b> 위에
+        확률 보정(isotonic)을 <b style="color:var(--ink)">모델이 이미 외운 학습 예측</b> 위에
         적합하고 있었다. 분류기는 학습 AUC 0.82, 검정 0.60이다. 그 격차 위에서 보정은
-        <b style="color:#fff">"원확률 0.9 = 진짜 0.95"</b>를 배우고 검정의 0.9(실제 0.6쯤)에
+        <b style="color:var(--ink)">"원확률 0.9 = 진짜 0.95"</b>를 배우고 검정의 0.9(실제 0.6쯤)에
         그대로 적용한다 — <b style="color:var(--bad)">과신을 교정하는 대신 증폭한다.</b>
       </p>
     </div>
@@ -544,10 +544,10 @@
   <div class="card hi" style="padding:20px 28px">
     <h3 style="margin-bottom:8px">수정 — 모델이 보지 못한 예측 위에서만 보정한다</h3>
     <p style="font-size:17px;line-height:1.6">
-      학습 구간 <b style="color:#fff">안에서</b> 다시 시간순으로 나눠 out-of-fold 예측을 만들고
+      학습 구간 <b style="color:var(--ink)">안에서</b> 다시 시간순으로 나눠 out-of-fold 예측을 만들고
       그 위에 isotonic을 적합했다. 학습-검정 격차가 보정에 반영되므로 과신이 실제로 교정된다.
-      <b style="color:#fff">Brier 0.2802 → 0.2430</b>, 잔여 편향은 전부 과소 방향(보수적인 쪽),
-      예측 CLI 출력은 <b style="color:#fff">89.0% → 66.0%</b>로 정상화됐다.
+      <b style="color:var(--ink)">Brier 0.2802 → 0.2430</b>, 잔여 편향은 전부 과소 방향(보수적인 쪽),
+      예측 CLI 출력은 <b style="color:var(--ink)">89.0% → 66.0%</b>로 정상화됐다.
     </p>
   </div>
   <div class="slide-num">11</div>
@@ -561,7 +561,7 @@
   <div style="display:flex;gap:38px">
     <div style="flex:1.3">
       <p class="sub" style="margin-bottom:14px;font-size:17px">
-        검정 구간 14,610건 · 880거래일 · <b style="color:#fff">학습에 쓰이지 않은 데이터</b>
+        검정 구간 14,610건 · 880거래일 · <b style="color:var(--ink)">학습에 쓰이지 않은 데이터</b>
       </p>
       <table>
         <thead>
@@ -583,7 +583,7 @@
       <div class="card hi" style="margin-top:24px;padding:22px 26px">
         <h3 style="margin-bottom:8px">규칙 기반 선별과의 공정한 비교</h3>
         <p style="font-size:16px;color:var(--muted);margin-bottom:10px;line-height:1.5">
-          단일 지표에는 임계값이 없으므로 <b style="color:#fff">사후에 상위 1,179개</b>를
+          단일 지표에는 임계값이 없으므로 <b style="color:var(--ink)">사후에 상위 1,179개</b>를
           뽑게 해줬다 — 미래를 아는 셈이라 규칙 쪽에 유리한 핸디캡이다.
           모델은 사전에 고정된 임계값만 쓴다.
         </p>
@@ -611,7 +611,7 @@
           </div>
           <div style="font-size:32px;color:var(--accent)">&rarr;</div>
           <div>
-            <div style="font-size:56px;font-weight:900;color:var(--accent-soft)">69.7%</div>
+            <div style="font-size:56px;font-weight:900;color:var(--accent)">69.7%</div>
             <div style="font-size:16px;color:var(--muted);margin-top:4px">확률 &ge; 0.55</div>
           </div>
         </div>
@@ -666,11 +666,11 @@
           <tbody>
             <tr class="hl"><td>상한가 이벤트 중 확률 0.55 넘는 비율</td>
                 <td class="num">73.4%</td></tr>
-            <tr><td>상한가 <b style="color:#fff">아닌</b> 이벤트 중 넘는 비율</td>
+            <tr><td>상한가 <b style="color:var(--ink)">아닌</b> 이벤트 중 넘는 비율</td>
                 <td class="num">2.3%</td></tr>
           </tbody>
         </table>
-        <p style="font-size:17px;margin-top:12px;color:#fff;font-weight:700">
+        <p style="font-size:17px;margin-top:12px;color:var(--ink);font-weight:700">
           모델은 사실상 <span class="bad">상한가 탐지기</span>였다.
         </p>
       </div>
@@ -697,7 +697,7 @@
       <div class="card">
         <h3 style="font-size:19px">왜 상한가는 살 수 없나</h3>
         <p style="font-size:17px;line-height:1.6">
-          가격제한폭에 닿으면 <b style="color:#fff">매수 잔량만 쌓이고 매도가
+          가격제한폭에 닿으면 <b style="color:var(--ink)">매수 잔량만 쌓이고 매도가
           말라붙는다.</b> 그날 거래대금이 100억을 넘었다는 것과, 종가 동시호가에
           내 주문이 체결된다는 것은 전혀 다른 문제다.
         </p>
@@ -711,8 +711,8 @@
 
   <div class="card hi" style="padding:20px 28px">
     <p style="font-size:19px;line-height:1.6">
-      <b style="color:#fff">두 가지가 모두 사실이다.</b>
-      상한가 다음날 시가가 오른다는 것은 <b style="color:#fff">진짜 발견</b>이다 —
+      <b style="color:var(--ink)">두 가지가 모두 사실이다.</b>
+      상한가 다음날 시가가 오른다는 것은 <b style="color:var(--ink)">진짜 발견</b>이다 —
       우연도 아니고 사후정보도 아니다(종가 시점에 상한가 여부를 안다).
       <b style="color:var(--bad)">그러나 그것으로 돈을 벌 수 있다는 증거는
       이 연구에 없다.</b>
@@ -722,7 +722,7 @@
 </section>
 
 <section data-label="결과 ⑤ 사지 않는 날의 값어치" data-screen-label="결과 ⑤ 사지 않는 날의 값어치" class="slide" id="s13">
-  <div class="eyebrow">결과 ④ · 이 연구의 핵심 발견</div>
+  <div class="eyebrow">결과 ⑤ · 운용점</div>
   <h1 class="title">모델의 값어치는 <span class="accent">&lsquo;사지 않는 날&rsquo;</span>에 있다</h1>
   <div class="rule" style="margin:20px 0 28px"></div>
 
@@ -735,7 +735,7 @@
         <tbody>
           <tr class="hl"><td>뽑힌 종목</td><td class="num">1,179</td>
               <td class="num">69.7%</td><td class="num">+4.65%</td></tr>
-          <tr><td><b style="color:#fff">같은 날</b> 안 뽑힌 종목</td><td class="num">9,968</td>
+          <tr><td><b style="color:var(--ink)">같은 날</b> 안 뽑힌 종목</td><td class="num">9,968</td>
               <td class="num">44.3%</td><td class="num">+0.25%</td></tr>
           <tr class="dim"><td>픽이 없던 날 전체</td><td class="num">3,463</td>
               <td class="num">40.6%</td><td class="num">+0.04%</td></tr>
@@ -744,7 +744,7 @@
       <p style="font-size:17px;margin-top:14px;line-height:1.55">
         같은 날 안에서 격차가 <b class="accent">승률 +25.4%p</b> ·
         <b class="accent">수익 +4.41%p</b>다 — 날짜 타이밍이 아니라
-        <b style="color:#fff">종목 선정력</b>이 대부분을 설명한다.
+        <b style="color:var(--ink)">종목 선정력</b>이 대부분을 설명한다.
       </p>
     </div>
 
@@ -775,11 +775,11 @@
   <div class="card hi" style="padding:20px 28px">
     <h3 style="margin-bottom:8px">왜 이전 지표들은 이걸 못 봤나</h3>
     <p style="font-size:17px;line-height:1.6">
-      IC도 상위10% 수익률도 <b style="color:#fff">날짜 안에서만</b> 계산된다. 그래서
-      <b style="color:#fff">&ldquo;오늘은 확신이 없으니 사지 않는다&rdquo;의 가치를 구조적으로
+      IC도 상위10% 수익률도 <b style="color:var(--ink)">날짜 안에서만</b> 계산된다. 그래서
+      <b style="color:var(--ink)">&ldquo;오늘은 확신이 없으니 사지 않는다&rdquo;의 가치를 구조적으로
       볼 수 없다.</b> 매일 상위 10%를 반드시 사야 하는 운용점에서 재면 모델은 단일 지표를
       7~15%밖에 못 넘지만, 쉴 수 있는 운용점에서는 결과가 달라진다.
-      <b style="color:#fff">두 결론은 모순이 아니라 서로 다른 운용점이다.</b>
+      <b style="color:var(--ink)">두 결론은 모순이 아니라 서로 다른 운용점이다.</b>
     </p>
   </div>
   <div class="slide-num">14</div>
@@ -794,7 +794,7 @@
       <h3 style="font-size:19px">최종 홀드아웃이 없다</h3>
       <p style="font-size:16px;line-height:1.6">
         4개 폴드를 여러 차례 들여다보며 버그를 고치고 재실행했다.
-        <b style="color:#fff">한 번도 보지 않은 데이터는 남아 있지 않다.</b>
+        <b style="color:var(--ink)">한 번도 보지 않은 데이터는 남아 있지 않다.</b>
         이 연구의 가장 큰 구조적 한계다.
       </p>
     </div>
@@ -803,16 +803,16 @@
       <p style="font-size:16px;line-height:1.6">
         픽의 <b style="color:var(--bad)">74%가 상한가</b>라 종가 체결을 가정할 수
         없다. 나머지도 종가 매수는 동시호가를 밀어올리고 시가 매도는 시가를
-        누르는데, <b style="color:#fff">일봉 데이터로는 측정 자체가 불가능</b>하다.
+        누르는데, <b style="color:var(--ink)">일봉 데이터로는 측정 자체가 불가능</b>하다.
       </p>
     </div>
     <div class="card">
       <h3 style="font-size:19px">재료는 "판정 불가"</h3>
       <p style="font-size:16px;line-height:1.6">
         원시 비교에선 재료가 붙은 이벤트가 크게 높지만
-        <b style="color:#fff">교란돼 있다</b> — 재료 출처가 '그날의 특징주'라
+        <b style="color:var(--ink)">교란돼 있다</b> — 재료 출처가 '그날의 특징주'라
         곧 크게 움직인 종목이라는 뜻이다. 통제 후 다중검정을 통과하지 못했다
-        (BH p=0.243). <b style="color:#fff">'효과 없음'이 아니라 '표본 부족'</b>이다.
+        (BH p=0.243). <b style="color:var(--ink)">'효과 없음'이 아니라 '표본 부족'</b>이다.
       </p>
     </div>
   </div>
@@ -829,8 +829,8 @@
       <span class="bad">그러나 그 픽의 74%는 상한가였고, 상한가는 살 수 없다.</span>
     </div>
     <div class="sub" style="margin-top:24px;font-size:19px">
-      상한가를 빼면 승률은 <b style="color:#fff">52.6%</b>(기저 43.0%)로 내려앉는다.
-      작지만 진짜인 우위다. <b style="color:#fff">이 연구가 증명한 것은 '신호가
+      상한가를 빼면 승률은 <b style="color:var(--ink)">52.6%</b>(기저 43.0%)로 내려앉는다.
+      작지만 진짜인 우위다. <b style="color:var(--ink)">이 연구가 증명한 것은 '신호가
       존재한다'이지 '이 전략으로 돈을 번다'가 아니다</b> — 그 둘을 구분하지
       못하면, 지표가 좋아지는 만큼 전략은 나빠진다.
     </div>

@@ -56,7 +56,8 @@ def is_breakout(df: pd.DataFrame, i: int) -> bool:
     return bool(c * v >= config.MIN_TRADING_VALUE)
 
 
-def labels(df: pd.DataFrame, i: int, cost: float = config.COST) -> dict:
+def labels(df: pd.DataFrame, i: int, cost: float = config.COST,
+           cfg_exit: str | None = None) -> dict:
     """봉 i 종가 매수 기준 라벨. 스펙 §6.
 
     y_raw    = (Open[i+1]-Close[i])/Close[i] - cost    (익일 시가청산, 비용차감)
@@ -74,6 +75,10 @@ def labels(df: pd.DataFrame, i: int, cost: float = config.COST) -> dict:
                학습에 쓰이지는 않는다 — 둘의 차이(X-Y)가 이 전략의 실질적인
                발견이므로 어느 한쪽으로 "단순화"해 없애면 안 된다.
     """
+    cfg_exit = config.EXIT if cfg_exit is None else cfg_exit
+    if cfg_exit not in ("open", "close"):
+        raise ValueError(f"EXIT는 'open' 또는 'close': {cfg_exit!r}")
+
     c = float(df["Close"].iloc[i])
     o1 = float(df["Open"].iloc[i + 1])
     c1 = float(df["Close"].iloc[i + 1])
@@ -87,11 +92,20 @@ def labels(df: pd.DataFrame, i: int, cost: float = config.COST) -> dict:
     else:
         y_hold20 = np.nan
 
+    # 청산 시점(config.EXIT)에 따라 이 연구가 실제로 쓰는 라벨이 정해진다.
+    #   "open"  -> y_raw  (종가 매수 -> 익일 시가)
+    #   "close" -> y_hold (종가 매수 -> 익일 종가)
+    # `y_exit`/`y_cls`가 파이프라인이 학습·평가에 쓰는 컬럼이고, y_raw/y_hold는
+    # 항상 같은 뜻을 유지해 비교·검증에 쓴다. 이름이 같은데 뜻이 다른 컬럼을
+    # 만들지 않기 위한 구분이다.
+    y_exit = y_raw if cfg_exit == "open" else y_hold
+
     return {
         "y_raw": y_raw,
         "y_hold": y_hold,
         "y_hold20": y_hold20,
-        "y_cls": int(y_raw > 0) if np.isfinite(y_raw) else 0,
+        "y_exit": y_exit,
+        "y_cls": int(y_exit > 0) if np.isfinite(y_exit) else 0,
         "y_up": y_up,
     }
 
@@ -164,9 +178,89 @@ def collect_events(ohlcv: dict[str, pd.DataFrame],
     return out
 
 
+def is_surge(df: pd.DataFrame, i: int) -> bool:
+    """봉 i가 급등주 이벤트인가 (거래대금·시가총액 조건은 여기서 보지 않는다).
+
+    조건: 당일 종가 등락률 >= SURGE_MIN_CHANGE · **상한가 제외** ·
+    손상 데이터(MAX_DAILY_MOVE 초과) 배제 · i>=MIN_BAR_INDEX · 익일 존재 ·
+    최근 HALT_LOOKBACK봉과 익일 봉에 거래정지 없음.
+
+    상한가를 빼는 이유: 상한가는 종가 동시호가에서 매수 잔량만 쌓이고 매도가
+    말라붙어 종가 체결을 가정할 수 없다. 52주 신고가 연구에서 모델 픽의 74%가
+    상한가였고 그것이 성과 대부분을 만들고 있었다(리포트 §5-5) — 살 수 없는
+    거래의 수익을 성과로 보고하지 않기 위해 이벤트 단계에서 배제한다.
+
+    거래대금은 조건이 아니라 **피처**로 둔다(F6 turnover_today). 실측상
+    거래대금이 클수록 되돌림이 강한 단조 관계(t=-9.30)가 있어, 잘라내면
+    가장 강한 변수 하나를 버리게 된다.
+    """
+    if i < config.MIN_BAR_INDEX or i + 1 >= len(df):
+        return False
+
+    if "halted" in df.columns:
+        lo = max(0, i - config.HALT_LOOKBACK + 1)
+        if bool(df["halted"].iloc[lo:i + 2].any()):
+            return False
+
+    c = float(df["Close"].iloc[i])
+    prev_c = float(df["Close"].iloc[i - 1])
+    if not (np.isfinite(c) and np.isfinite(prev_c) and c > 0 and prev_c > 0):
+        return False
+
+    chg = c / prev_c - 1.0
+    if chg > config.MAX_DAILY_MOVE:      # 물리적으로 불가능한 값 = 손상 데이터
+        return False
+    return bool(config.SURGE_MIN_CHANGE <= chg < config.LIMIT_UP_PCT)
+
+
+def collect_surge_events(ohlcv: dict[str, pd.DataFrame],
+                         shares: dict[str, pd.Series],
+                         exclude: set[str] | None = None) -> pd.DataFrame:
+    """급등주 이벤트와 라벨을 모은다.
+
+    `shares`는 sources.load_list_shares()의 결과 — 시점 시가총액을 계산해
+    SURGE_MIN_MARKET_CAP 미만을 거른다. 스냅샷이 없는 구간(상장 직후 등)은
+    시총을 알 수 없으므로 이벤트에서 뺀다. 0으로 메우거나 현재 시총을
+    끌어다 쓰면 각각 필터 무력화·미래정보가 된다.
+    """
+    from surge_d1 import sources
+
+    rows = []
+    for code, df in ohlcv.items():
+        if exclude and code in exclude:
+            continue
+        n = len(df)
+        if n < config.MIN_BAR_INDEX + 2:
+            continue
+        sh = shares.get(code)
+        if sh is None:
+            continue
+        c = df["Close"].to_numpy(dtype=float)
+        v = df["Volume"].to_numpy(dtype=float)
+        idx = df.index
+        for i in range(config.MIN_BAR_INDEX, n - 1):
+            if not is_surge(df, i):
+                continue
+            mcap = sources.market_cap_at(sh, idx[i], c[i])
+            if not np.isfinite(mcap) or mcap < config.SURGE_MIN_MARKET_CAP:
+                continue
+            lab = labels(df, i)
+            if not np.isfinite(lab["y_exit"]):
+                continue
+            rows.append({"code": code, "date": idx[i], "i": i,
+                         "close": c[i], "market_cap": mcap,
+                         "tval_today": c[i] * v[i], **lab})
+    out = pd.DataFrame(rows)
+    if len(out):
+        out = out.sort_values(["date", "code"]).reset_index(drop=True)
+    return out
+
+
 def add_market_adjusted(events: pd.DataFrame) -> pd.DataFrame:
     """같은 날 이벤트들의 y_raw 중앙값을 빼 시장조정 라벨을 만든다. 스펙 §6."""
     out = events.copy()
-    med = out.groupby("date")["y_raw"].transform("median")
-    out["y_mkt"] = out["y_raw"] - med
+    # 라벨과 같은 청산 시점을 써야 한다 — 시가청산 연구인데 종가 기준
+    # 중앙값을 빼면 두 정의가 섞인다.
+    med = out.groupby("date")["y_exit"].transform("median")
+    out["y_mkt"] = out["y_exit"] - med
     return out

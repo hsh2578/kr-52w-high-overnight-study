@@ -133,6 +133,42 @@ def load_catalyst() -> pd.DataFrame:
     return out.reset_index(drop=True)
 
 
+def load_list_shares() -> dict[str, pd.Series]:
+    """종목별 **시점 상장주식수** 시계열. scripts/fetch_marketcap.py의 산출물.
+
+    반환: {code: Series(index=스냅샷 날짜, values=상장주식수)} — 날짜 오름차순.
+
+    쓰는 법:
+        shares(t) = 시계열에서 t **이전**의 가장 가까운 스냅샷
+        시가총액(t) = shares(t) x 종가(t)
+
+    왜 '이전'인가: t 시점에 알 수 있는 최신 값만 써야 한다. 미래 스냅샷을
+    쓰면 유상증자·분할을 미리 아는 셈이 된다.
+    """
+    if not config.LIST_SHARES_PATH.exists():
+        raise FileNotFoundError(
+            f"{config.LIST_SHARES_PATH} 없음. 먼저 실행: "
+            "python scripts/fetch_marketcap.py")
+    df = pd.read_parquet(config.LIST_SHARES_PATH)
+    return {c: g.set_index("date")["shares"].sort_index()
+            for c, g in df.groupby("code")}
+
+
+def market_cap_at(shares: pd.Series | None, date, close: float) -> float:
+    """시점 시가총액. 해당 날짜 이전 스냅샷이 없으면 NaN.
+
+    NaN을 0이나 현재값으로 메우지 않는 이유: 그러면 상장 초기 종목이
+    조용히 필터를 통과하거나(0) 미래 정보가 섞인다(현재값). 모르면
+    모른다고 두고 이벤트에서 빼는 편이 정직하다.
+    """
+    if shares is None or not np.isfinite(close):
+        return float("nan")
+    pos = shares.index.searchsorted(pd.Timestamp(date), side="right") - 1
+    if pos < 0:
+        return float("nan")
+    return float(shares.iloc[pos]) * float(close)
+
+
 def build_market_index(ohlcv: dict[str, pd.DataFrame]) -> pd.DataFrame:
     """전 종목 등가중 시장 지수. FDR의 KS11 호출이 불안정해 대용으로 쓴다.
 

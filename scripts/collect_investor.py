@@ -155,9 +155,17 @@ def collect_code(token: str, code: str, start: pd.Timestamp,
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--top-up", action="store_true",
+                    help="이미 수집된 종목도 '끊긴 뒤 구간'만 이어서 채운다. "
+                         "이 수집은 과거 방향으로만 진행돼 종목의 98.4%가 "
+                         "2026-08 이전에 끊겨 있었다(종료일 중앙값 2025-12-16).")
+    ap.add_argument("--events", default=None,
+                    help="종목·기간의 출처 parquet. 기본은 data/events.parquet "
+                         "(52주 신고가). 급등주 연구는 그 이벤트 파일을 넘겨야 "
+                         "종목 집합과 기간이 맞는다.")
     args = ap.parse_args()
 
-    ev = pd.read_parquet(EVENTS)
+    ev = pd.read_parquet(args.events or EVENTS)
     span = ev.groupby("code")["date"].agg(["min", "max"])
     # 수급 피처는 이벤트 직전 20거래일을 보므로 시작을 40일 앞당긴다
     span["min"] = span["min"] - timedelta(days=45)
@@ -176,7 +184,23 @@ def main() -> int:
         store = pickle.load(open(OUT, "rb"))
         print(f"기존 수집분 {len(store):,}종목 이어서 진행", flush=True)
 
-    todo = [c for c in codes if not (c in store and len(store[c]))]
+    if args.top_up:
+        # 이미 있는 종목이라도 '마지막 수집일 < 필요한 마지막 날짜'면 다시 대상에
+        # 넣고, 그 종목의 시작점을 마지막 수집일로 당겨 꼬리만 받는다.
+        todo = []
+        for c in codes:
+            need_end = span.loc[c, "max"]
+            cur = store.get(c)
+            if cur is None or not len(cur):
+                todo.append(c)
+                continue
+            have_end = pd.to_datetime(cur["date"]).max()
+            if have_end < need_end - timedelta(days=3):
+                span.loc[c, "min"] = have_end       # 겹치는 며칠은 병합 때 정리
+                todo.append(c)
+        print(f"top-up 대상 {len(todo):,}종목 (전체 {len(codes):,})", flush=True)
+    else:
+        todo = [c for c in codes if not (c in store and len(store[c]))]
     print(f"수집 대상 {len(todo):,}종목 · 워커 {MAX_WORKERS}개", flush=True)
 
     lock = threading.Lock()
@@ -197,6 +221,11 @@ def main() -> int:
         futures = [ex.submit(work, c) for c in todo]
         for fut in as_completed(futures):
             code, df = fut.result()
+            if args.top_up and code in store and len(store[code]) and len(df):
+                df = (pd.concat([store[code], df], ignore_index=True)
+                        .drop_duplicates(subset=["date"], keep="last")
+                        .sort_values("date")
+                        .reset_index(drop=True))
             with lock:
                 state["n"] += 1
                 if df.empty:
