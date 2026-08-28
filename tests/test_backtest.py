@@ -120,6 +120,23 @@ def test_random_baseline_시드고정이면_재현된다():
     b = backtest.simulate_random(toy(), top_n=2, n_iter=5, seed=42)
     pd.testing.assert_frame_equal(a, b)
 
+def test_apply_one_time_cost는_등가곱을_균일하게_스케일한다():
+    r = pd.Series([0.10, 0.05, -0.02],
+                 index=pd.bdate_range("2024-01-01", periods=3))
+    adj = backtest._apply_one_time_cost(r, cost=0.0021)
+    equity_before = float((1 + r).prod())
+    equity_after = float((1 + adj).prod())
+    assert equity_after == pytest.approx(equity_before * (1 - 0.0021))
+    # 첫날만 바뀌고 이후는 그대로다(매일 비용을 떼는 게 아니라 딱 한 번)
+    pd.testing.assert_series_equal(adj.iloc[1:], r.iloc[1:])
+
+
+def test_apply_one_time_cost는_빈_시리즈도_죽지_않는다():
+    r = pd.Series([], dtype=float, index=pd.to_datetime([]))
+    adj = backtest._apply_one_time_cost(r, cost=0.0021)
+    assert len(adj) == 0
+
+
 
 def _normal_daily(n=250, mu=0.001, sigma=0.01, seed=0):
     rng = np.random.default_rng(seed)
@@ -166,3 +183,48 @@ def test_strategy_correlation_대각선은_1이고_대칭이다():
     assert corr.loc["a", "b"] == pytest.approx(corr.loc["b", "a"])
     assert (corr.to_numpy() <= 1.0 + 1e-9).all()
     assert (corr.to_numpy() >= -1.0 - 1e-9).all()
+
+
+def toy_liq():
+    """2일 x 4종목, liquidity(거래대금) 컬럼 포함 — capacity 테스트용."""
+    return pd.DataFrame({
+        "date": pd.to_datetime(["2024-01-02"] * 4 + ["2024-01-03"] * 4),
+        "code": list("abcd") * 2,
+        "y_raw": [0.04, 0.02, -0.01, -0.03] * 2,
+        "score": [0.9, 0.7, 0.3, 0.1] * 2,
+        "liquidity": [10.0, 20.0, 30.0, 40.0] * 2,
+    })
+
+
+def test_picked_liquidity_topn모드는_상위픽만_모은다():
+    vals = backtest.picked_liquidity(toy_liq(), mode="topn",
+                                     score_col="score", top_n=2)
+    # 매일 상위 2(score=0.9,0.7 -> liquidity=10,20), 이틀 반복
+    assert sorted(vals.tolist()) == [10.0, 10.0, 20.0, 20.0]
+
+
+def test_picked_liquidity_threshold모드는_임계값_이상만_모은다():
+    vals = backtest.picked_liquidity(toy_liq(), mode="threshold",
+                                     score_col="score", threshold=0.5)
+    assert sorted(vals.tolist()) == [10.0, 10.0, 20.0, 20.0]
+
+
+def test_picked_liquidity_random모드는_시드고정이면_재현된다():
+    a = backtest.picked_liquidity(toy_liq(), mode="random", top_n=2,
+                                  n_iter=5, seed=42)
+    b = backtest.picked_liquidity(toy_liq(), mode="random", top_n=2,
+                                  n_iter=5, seed=42)
+    assert np.array_equal(a, b)
+    # 매일 4종목 중 2개씩, 5회 반복, 2일 -> 20개 값
+    assert len(a) == 20
+
+
+def test_capacity_table은_전략별_median과_p10을_담는다():
+    oos = toy_liq()
+    specs = {"model_top5": dict(mode="topn", score_col="score", top_n=2)}
+    tbl = backtest.capacity_table(oos, specs=specs)
+    assert {"strategy", "n", "p10", "median", "mean"} <= set(tbl.columns)
+    row = tbl.set_index("strategy").loc["model_top5"]
+    # score 상위 2 = liquidity 10, 20 두 값씩 이틀 -> median 15
+    assert row["median"] == pytest.approx(15.0)
+    assert row["n"] == 4

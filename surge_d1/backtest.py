@@ -67,11 +67,12 @@ def simulate_random(df: pd.DataFrame, top_n: int, n_iter: int = 20,
 
 
 def _empty_stats() -> dict:
-    keys = ("cum_return cagr vol sharpe sortino calmar mdd mdd_days win_rate "
-            "profit_factor expectancy sqn best_day worst_day alpha beta").split()
+    keys = ("cum_return cum_return_additive cagr vol sharpe sortino calmar mdd "
+            "mdd_days win_rate profit_factor expectancy mean_trade_ret sqn "
+            "best_day worst_day alpha beta").split()
     out = {k: float("nan") for k in keys}
-    out.update({"cum_return": 0.0, "cagr": 0.0, "vol": 0.0, "mdd": 0.0,
-                "mdd_days": 0, "n_days": 0, "n_trades": 0})
+    out.update({"cum_return": 0.0, "cum_return_additive": 0.0, "cagr": 0.0,
+                "vol": 0.0, "mdd": 0.0, "mdd_days": 0, "n_days": 0, "n_trades": 0})
     return out
 
 
@@ -93,7 +94,17 @@ def _max_drawdown_days(equity: pd.Series) -> int:
 def performance_stats(daily: pd.DataFrame,
                       benchmark: pd.Series | None = None,
                       risk_free: float = 0.0) -> dict:
-    """일별 수익률 → 성과 지표. 매일 전액 재투자(복리) 가정.
+    """일별 수익률 → 성과 지표.
+
+    ⚠️ **읽는 순서에 대한 지침**: `cum_return`/`cagr`는 매일 전액 재투자(복리)를
+    가정한다 — 무제한 자본, 매일 5종목 전액 집중, 시장충격 0을 전제하는
+    **달성 불가능한 상한**이다(880 거래일·3.6년을 이 가정으로 복리하면 작은
+    일평균 우위도 기하급수적으로 부풀려진다). 이 함수가 우선 보고해야 할
+    "규모에 무관한(scale-free)" 1차 지표는 `expectancy`(일평균), `sharpe`,
+    `mean_trade_ret`(종목당 평균), `mdd`, `win_rate`이고, 복리 계열
+    (`cum_return`, `cagr`)은 "상한 참고치"로 격하해 표기한다.
+    `cum_return_additive`(복리 없이 일별 수익률을 단순 합산 — 고정 명목원금
+    기준)가 복리에 오염되지 않은 누적 지표다.
 
     지표 정의는 공개 라이브러리를 그대로 따랐다(자의적 공식이 아님):
       - Sortino / Calmar / Alpha / Beta : vectorbt `vectorbt/returns/nb.py`
@@ -114,9 +125,15 @@ def performance_stats(daily: pd.DataFrame,
     excess = r - rf_daily
 
     equity = (1.0 + r).cumprod()
+    # cum_return: 매일 전액 재투자(복리) 가정 — 무제한 자본·시장충격 0을
+    # 전제하므로 "달성 가능한 상한"으로만 읽어야 한다(보고서 §참고).
     cum_return = float(equity.iloc[-1] - 1.0)
     # 연환산 수익률: (∏(1+r))^(252/n) - 1   (vectorbt annualized_return)
     cagr = float(equity.iloc[-1] ** (TRADING_DAYS / n) - 1.0)
+    # cum_return_additive: 복리 없이 일별 수익률을 그냥 더한 값(고정 명목원금
+    # 기준). 신호 강도를 복리가 부풀리지 않은 채로 보여주는 1차 지표 —
+    # 매일 자본을 100% 재배분한다는 비현실적 가정이 필요 없다.
+    cum_return_additive = float(r.sum())
 
     sd = float(r.std(ddof=1)) if n > 1 else 0.0     # 표본 표준편차(Bessel)
     vol = sd * np.sqrt(TRADING_DAYS)
@@ -140,6 +157,17 @@ def performance_stats(daily: pd.DataFrame,
     # SQN = √N × mean/std  (N<30이면 신뢰 불가 → NaN)
     sqn = float(np.sqrt(n) * r.mean() / sd) if (sd > 0 and n >= 30) else float("nan")
 
+    # mean_trade_ret: 포트폴리오-일 단위가 아니라 "개별 종목 매매 1건" 단위
+    # 평균 수익률. 하루에 담긴 종목 수(n_picked)가 날마다 다르면 두 평균이
+    # 갈릴 수 있다 — 종목 수 가중평균이라 종목이 많이 담긴 날에 더 큰 비중을
+    # 준다. n_picked가 없거나(구버전 daily) 전부 0이면 NaN.
+    if "n_picked" in daily.columns:
+        npk = daily["n_picked"].reindex(r.index).astype(float).fillna(0.0)
+        denom = float(npk.sum())
+        mean_trade_ret = float((r * npk).sum() / denom) if denom > 0 else float("nan")
+    else:
+        mean_trade_ret = float("nan")
+
     alpha = beta = float("nan")
     if benchmark is not None:
         b = benchmark.reindex(r.index).astype(float)
@@ -154,12 +182,13 @@ def performance_stats(daily: pd.DataFrame,
                 alpha = float((np.mean(a_series) + 1.0) ** TRADING_DAYS - 1.0)
 
     return {
-        "cum_return": cum_return, "cagr": cagr, "vol": vol,
+        "cum_return": cum_return, "cum_return_additive": cum_return_additive,
+        "cagr": cagr, "vol": vol,
         "sharpe": sharpe, "sortino": sortino, "calmar": calmar,
         "mdd": mdd, "mdd_days": _max_drawdown_days(equity),
         "win_rate": float((r > 0).mean()),
         "profit_factor": profit_factor,
-        "expectancy": float(r.mean()),
+        "expectancy": float(r.mean()), "mean_trade_ret": mean_trade_ret,
         "sqn": sqn,
         "best_day": float(r.max()), "worst_day": float(r.min()),
         "alpha": alpha, "beta": beta,
@@ -171,27 +200,42 @@ def out_of_sample_predictions(df: pd.DataFrame) -> pd.DataFrame:
     """walk-forward 폴드별 검정 구간 예측만 모아 이어 붙인다.
 
     학습 구간 예측으로 백테스트하면 전부 거짓이므로 반드시 이 경로를 쓴다.
+
+    ⚠️ **재현성(Task 12 재검토)**: LightGBM은 `n_jobs=-1`(다중 스레드)일 때
+    히스토그램 분할 순서에 미세한 부동소수점 비결정성이 있고, 이게 880일
+    복리를 거치며 눈에 띄게 증폭됐다(재실행마다 CAGR이 수백%p씩 흔들림).
+    `surge_d1/models.py`는 다른 작업이 편집 중이라 그 파일의
+    `REG_PARAMS`/`CLF_PARAMS`는 건드리지 않고, **이 백테스트 경로 안에서만
+    일시적으로 `n_jobs=1`로 덮어썼다가 끝나면 원래 값으로 복구한다** —
+    모듈 전역을 저장해뒀다 finally에서 되돌리는 방식이라 예외가 나도 복구된다.
     """
     from surge_d1 import dataset, models, validate
 
-    feats = dataset.FEATURE_SETS["M4"]
-    parts = []
-    for tr_mask, te_mask in validate.walk_forward_folds(df["date"],
-                                                        models.TEST_YEARS):
-        tr = df[tr_mask].reset_index(drop=True)
-        te = df[te_mask].reset_index(drop=True)
-        out = models.fit_predict(tr, te, feats)
-        te = te.copy()
-        te["score"] = out["prob_cal"]
-        te["pred_ret"] = out["pred_reg"]
+    orig_reg, orig_clf = models.REG_PARAMS, models.CLF_PARAMS
+    models.REG_PARAMS = dict(orig_reg, n_jobs=1)
+    models.CLF_PARAMS = dict(orig_clf, n_jobs=1)
+    try:
+        feats = dataset.FEATURE_SETS["M4"]
+        parts = []
+        for tr_mask, te_mask in validate.walk_forward_folds(df["date"],
+                                                            models.TEST_YEARS):
+            tr = df[tr_mask].reset_index(drop=True)
+            te = df[te_mask].reset_index(drop=True)
+            out = models.fit_predict(tr, te, feats)
+            te = te.copy()
+            te["score"] = out["prob_cal"]
+            te["pred_ret"] = out["pred_reg"]
 
-        # 분위수 임계값은 **학습 구간 예측**으로 정한다. 검정 구간 예측으로 정하면
-        # 결과를 보고 고르는 셈이라 체리피킹이다.
-        tr_out = models.fit_predict(tr, tr, feats)
-        thr = float(np.quantile(tr_out["prob_cal"], 0.80))
-        te["pick_q80"] = (te["score"] >= thr).astype(int)
+            # 분위수 임계값은 **학습 구간 예측**으로 정한다. 검정 구간
+            # 예측으로 정하면 결과를 보고 고르는 셈이라 체리피킹이다.
+            tr_out = models.fit_predict(tr, tr, feats)
+            thr = float(np.quantile(tr_out["prob_cal"], 0.80))
+            te["pick_q80"] = (te["score"] >= thr).astype(int)
 
-        parts.append(te)
+            parts.append(te)
+    finally:
+        models.REG_PARAMS, models.CLF_PARAMS = orig_reg, orig_clf
+
     if not parts:
         return df.head(0).assign(score=[], pred_ret=[], pick_q80=[])
     return pd.concat(parts, ignore_index=True)
@@ -347,11 +391,136 @@ def deflated_sharpe_table(daily: pd.DataFrame, strategy_cols: list[str],
     return pd.DataFrame(rows)
 
 
+def picked_liquidity(df: pd.DataFrame, mode: str,
+                     score_col: str | None = None,
+                     top_n: int | None = None,
+                     threshold: float | None = None,
+                     n_iter: int = 20, seed: int = config.RANDOM_SEED,
+                     value_col: str = "liquidity") -> np.ndarray:
+    """전략이 실제로 고른 종목들의 liquidity(5일 평균 거래대금, 원) 값을 모은다.
+
+    자본 배분 여력(capacity)을 가늠하기 위함이다 — 상위 픽이 거래대금이
+    얇은 종목에 몰려 있으면, 백테스트가 가정하는 크기의 주문을 실제로는
+    체결시킬 수 없다는 뜻이다. simulate()/simulate_threshold()/
+    simulate_random()과 정확히 같은 선정 규칙을 재현해 값만 다르게 모은다
+    (수익률 대신 liquidity를 모은다는 점만 다르다).
+
+    mode: "topn"(simulate와 동일, top_n=None이면 전부) |
+         "threshold"(simulate_threshold와 동일) |
+         "random"(simulate_random과 동일, 시드 고정 시 재현 가능)
+    """
+    vals = []
+    if mode == "topn":
+        for _, g in df.groupby("date"):
+            picked = g if top_n is None else g.nlargest(top_n, score_col)
+            if len(picked):
+                vals.append(picked[value_col].to_numpy())
+    elif mode == "threshold":
+        for _, g in df.groupby("date"):
+            picked = g[g[score_col] >= threshold]
+            if len(picked):
+                vals.append(picked[value_col].to_numpy())
+    elif mode == "random":
+        rng = np.random.default_rng(seed)
+        for _ in range(n_iter):
+            for _, g in df.groupby("date"):
+                k = min(top_n, len(g))
+                if k == 0:
+                    continue
+                idx = rng.choice(len(g), size=k, replace=False)
+                vals.append(g[value_col].to_numpy()[idx])
+    else:
+        raise ValueError(f"알 수 없는 mode: {mode}")
+    if not vals:
+        return np.array([])
+    return np.concatenate(vals)
+
+
+# 메인 전략들의 실제 선정 규칙 — capacity_table이 picked_liquidity에 그대로
+# 넘겨 유동성 분포를 모은다. run_backtest의 strategies 딕셔너리 구성과 반드시
+# 짝이 맞아야 한다(선정 규칙이 갈라지면 capacity 수치가 실제 백테스트와
+# 어긋난다).
+CAPACITY_SPECS = {
+    "all_breakouts": dict(mode="topn", score_col="score", top_n=None),
+    "rule_top5_close": dict(mode="topn", score_col="close_strength", top_n=5),
+    "rule_top5_breakout": dict(mode="topn", score_col="breakout_pct", top_n=5),
+    "random_5": dict(mode="random", top_n=5),
+    "model_prob50": dict(mode="threshold", score_col="score", threshold=0.50),
+    "model_top5": dict(mode="topn", score_col="score", top_n=5),
+}
+
+
+def capacity_table(oos: pd.DataFrame,
+                   specs: dict | None = None) -> pd.DataFrame:
+    """메인 전략별 실제 매수 종목의 유동성(거래대금) 분포 요약.
+
+    median만 보면 꼬리의 소형주 쏠림을 놓친다 — p10(하위 10%)을 같이 봐야
+    "가장 얇은 픽이 얼마나 얇은지"를 판단할 수 있다.
+    """
+    specs = CAPACITY_SPECS if specs is None else specs
+    rows = []
+    for name, kw in specs.items():
+        vals = picked_liquidity(oos, **kw)
+        if len(vals) == 0:
+            rows.append({"strategy": name, "n": 0, "p10": float("nan"),
+                        "median": float("nan"), "mean": float("nan")})
+            continue
+        rows.append({"strategy": name, "n": int(len(vals)),
+                    "p10": float(np.quantile(vals, 0.10)),
+                    "median": float(np.median(vals)),
+                    "mean": float(np.mean(vals))})
+    return pd.DataFrame(rows)
+
+
+def _apply_one_time_cost(ret: pd.Series, cost: float) -> pd.Series:
+    """복리 경로 전체를 (1-cost)배로 균일하게 스케일해, 보유기간 전체에
+    비용을 딱 한 번만 반영한다.
+
+    첫날 수익률만 (1+r1)(1-cost)-1 로 바꾸면 등가곱 ∏(1+r_t)가 정확히
+    원래 등가곱의 (1-cost)배가 된다 — 그 뒤 모든 날은 그대로 둔다.
+    매일 비용을 떼는 것과 달리 MDD처럼 '비율'만 보는 지표를 왜곡하지 않는다
+    (전체 경로가 상수배로 스케일되면 고점 대비 낙폭 비율은 불변이다).
+    """
+    out = ret.astype(float).copy()
+    if len(out) > 0:
+        out.iloc[0] = (1.0 + out.iloc[0]) * (1.0 - cost) - 1.0
+    return out
+
+
 def market_benchmark(df: pd.DataFrame) -> pd.DataFrame:
-    """벤치마크: 그날 이벤트 유무와 무관한 전 종목 등가중 익일 시가 수익률.
+    """벤치마크: 시장을 그냥 사서 계속 들고 있었다면(buy & hold).
 
     FinRL 이 항상 지수(^DJI)와 나란히 보고하는 관행을 따른다 — 전략 수익률만
     단독으로 제시하면 시장이 좋아서 번 것인지 구분할 수 없다.
+
+    ⚠️ **Task 12 재검토로 수정**: 예전 버전은 익일 시가 갭 수익률에서 왕복비용을
+    **매일** 뗐다. 이는 계속 들고 있는 벤치마크가 아니라 "매일 사고파는" 전략을
+    가정한 것이라 틀렸다 — 실제로 매수보유는 진입·청산 단 두 번만 비용이
+    발생한다(그마저도 왕복비용 하나로 이미 표현됨). 그래서:
+      1) 계속 들고 있는다는 가정에 맞게 **종가-종가 전 종목 등가중 일별수익률**
+         (`build_market_index`의 `ret`, 갭이 아니라 하루 전체 수익률)을 쓴다.
+      2) 왕복비용은 보유기간 전체에 **딱 한 번만** 문다 — 복리 경로 전체를
+         (1-COST)배로 균일하게 스케일하면 되므로, 첫날 수익률에 한 번만
+         반영한다(등가곱 (1+r1)(1+r2)...(1+rT) = (1-COST)×원래 등가곱과
+         정확히 같다 — MDD처럼 비율만 보는 지표는 왜곡되지 않는다).
+    """
+    from surge_d1 import sources
+
+    ohlcv = sources.load_ohlcv()
+    mi = sources.build_market_index(ohlcv)
+    hold = _apply_one_time_cost(mi["ret"].dropna(), config.COST)
+    out = pd.DataFrame({"ret": hold, "n_picked": mi["n"].reindex(hold.index)})
+    return out
+
+
+def market_gap_diagnostic(df: pd.DataFrame) -> pd.DataFrame:
+    """진단용(참고): 시장 전체에 이벤트/모델 전략과 같은 매매방식을 적용했다면.
+
+    이것은 벤치마크가 아니다 — "종가 매수 → 익일 시가 매도"를 시장 전체에
+    매일 반복하는, 사실상의 별도 회전매매 전략이다. 그래서 왕복비용도 원래
+    방식대로 **매일** 뗀다(model_*/rule_* 전략과 같은 매매방식·같은 비용
+    처리를 시장 전체에 적용했을 때의 참고 수치). `market_benchmark`(buy&hold)와
+    혼동하지 않도록 별도 함수·별도 이름(`market_gap_daily`)으로 둔다.
     """
     from surge_d1 import sources
 
@@ -362,10 +531,15 @@ def market_benchmark(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def run_backtest(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def run_backtest(df: pd.DataFrame
+                 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """전략들을 out-of-sample 예측 위에서 시뮬레이션한다.
 
-    반환: (성과표, 일별수익률표, 비용민감도표)
+    반환: (성과표, 일별수익률표, 비용민감도표, capacity표)
+
+    ⚠️ Task 12 재검토로 capacity표(4번째 원소)가 추가됐다 — 원래는 3-튜플이었다.
+    이 함수를 직접 부르는 테스트가 없어(전부 toy 데이터로 단위 함수들만
+    테스트) 안전하게 확장했다.
     """
     oos = out_of_sample_predictions(df)
     mkt = market_benchmark(df)
@@ -382,6 +556,9 @@ def run_backtest(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataF
     }
     # 부록 — 계산은 하되 메인 그림에는 넣지 않는다
     appendix = {
+        # 벤치마크가 아니라 진단용 참고치: 시장 전체에 model_*/rule_* 전략과
+        # 같은 매매방식(종가매수→익일시가매도, 비용 매일)을 적용했다면.
+        "market_gap_daily": market_gap_diagnostic(df),
         "model_prob55": simulate_threshold(oos, "score", 0.55),
         "model_ret_pos": simulate_threshold(oos, "pred_ret", 0.0),
         "model_top10": simulate(oos, "score", 10),
@@ -398,7 +575,8 @@ def run_backtest(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataF
         [v["ret"].rename(k) for k, v in strategies.items()], axis=1
     ).sort_index()
     sens = cost_sensitivity(oos)
-    return stats, daily, sens
+    capacity = capacity_table(oos)
+    return stats, daily, sens, capacity
 
 
 # market은 벤치마크이지 "탐색해서 고른 후보"가 아니므로 다중검정 시행에서 뺀다.
@@ -421,7 +599,7 @@ DSR_N_TRIALS_EFFECTIVE = 6                 # 서로 다른 신호 계열 수
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     df = pd.read_parquet(config.DATASET_PATH)
-    stats, daily, sens = run_backtest(df)
+    stats, daily, sens, capacity = run_backtest(df)
     config.RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     stats.to_csv(config.RESULTS_DIR / "backtest_stats.csv",
                  index=False, encoding="utf-8-sig")
@@ -429,6 +607,8 @@ def main() -> int:
                  encoding="utf-8-sig")
     sens.to_csv(config.RESULTS_DIR / "backtest_cost_sensitivity.csv",
                 index=False, encoding="utf-8-sig")
+    capacity.to_csv(config.RESULTS_DIR / "backtest_capacity.csv",
+                    index=False, encoding="utf-8-sig")
 
     dsr_naive = deflated_sharpe_table(daily, DSR_CANDIDATES, DSR_N_TRIALS_NAIVE)
     dsr_eff = deflated_sharpe_table(daily, DSR_CANDIDATES, DSR_N_TRIALS_EFFECTIVE)
@@ -443,14 +623,50 @@ def main() -> int:
     corr.to_csv(config.RESULTS_DIR / "backtest_correlation.csv",
                encoding="utf-8-sig")
 
-    show = stats.copy()
-    for c in ("cum_return", "cagr", "vol", "mdd", "win_rate", "alpha"):
-        show[c] = (show[c] * 100).round(2)
-    for c in ("sharpe", "sortino", "calmar", "sqn", "beta", "profit_factor"):
-        show[c] = show[c].round(3)
-    print(show[["strategy", "cum_return", "cagr", "vol", "mdd", "mdd_days",
-                "sharpe", "sortino", "calmar", "sqn", "win_rate",
-                "profit_factor", "alpha", "beta", "n_days"]].to_string(index=False))
+    # 1차(scale-free) 표 -- 복리 없이 규모에 무관한 지표만. 처음 보이는
+    # 숫자가 복리로 부풀려진 값이 되지 않도록 이 표를 가장 먼저 찍는다.
+    primary = stats.merge(
+        dsr_eff[["strategy", "dsr"]].rename(columns={"dsr": "dsr_eff6"}),
+        on="strategy", how="left")
+    primary = primary.merge(
+        dsr_naive[["strategy", "dsr"]].rename(columns={"dsr": "dsr_naive11"}),
+        on="strategy", how="left")
+    show1 = primary.copy()
+    show1["mean_day_%"] = (show1["expectancy"] * 100).round(3)
+    show1["mean_trade_%"] = (show1["mean_trade_ret"] * 100).round(3)
+    show1["mdd_%"] = (show1["mdd"] * 100).round(2)
+    show1["win_rate_%"] = (show1["win_rate"] * 100).round(2)
+    for c in ("sharpe", "dsr_naive11", "dsr_eff6"):
+        show1[c] = show1[c].round(4)
+    print("=== 1차 지표(규모 무관, 복리 아님) -- 이 결과의 실제 헤드라인 ===")
+    print(show1[["strategy", "mean_day_%", "mean_trade_%", "sharpe",
+                "dsr_naive11", "dsr_eff6", "mdd_%", "mdd_days", "win_rate_%",
+                "n_days", "n_trades"]].to_string(index=False))
+
+    # 2차(복리) 표 -- 참고용 상한치. 매일 전액 재투자·무제한 자본·시장충격
+    # 0을 가정하므로 실제로 달성 가능한 수치가 아니다. 1차 표 다음에만,
+    # "상한 참고치"라는 라벨과 함께 보여준다.
+    show2 = stats.copy()
+    show2["cum_return_additive_%"] = (show2["cum_return_additive"] * 100).round(2)
+    show2["cagr_%(상한,비현실적)"] = (show2["cagr"] * 100).round(1)
+    show2["cum_return_%(상한,비현실적)"] = (show2["cum_return"] * 100).round(1)
+    print("\n=== 2차 지표(복리) -- 경고: 매일 전액 재투자·무제한 자본·"
+          "시장충격 0을 가정한 '달성 불가능한 상한'일 뿐, 실현 가능한 "
+          "수익 전망이 아니다. cum_return_additive_%(단순 합산, 고정 "
+          "명목원금 기준)만이 복리에 오염되지 않은 누적 지표다 ===")
+    print(show2[["strategy", "cum_return_additive_%",
+                "cagr_%(상한,비현실적)",
+                "cum_return_%(상한,비현실적)"]].to_string(index=False))
+
+    print("\n=== Capacity(자본 여력) -- 실제로 고른 종목의 5일평균 거래대금"
+          "(liquidity, 억원) ===")
+    show_cap = capacity.copy()
+    for c in ("p10", "median", "mean"):
+        show_cap[c] = (show_cap[c] / 1e8).round(1)   # 원 -> 억원
+    show_cap = show_cap.rename(columns={"p10": "p10_억원", "median": "median_억원",
+                                        "mean": "mean_억원"})
+    print(show_cap.to_string(index=False))
+
     print("\n=== 비용 민감도 (model_top5) ===")
     print(sens.assign(**{c: (sens[c] * 100).round(2)
                          for c in ("extra_cost", "cum_return", "cagr",
