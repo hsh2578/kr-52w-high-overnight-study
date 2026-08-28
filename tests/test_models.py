@@ -101,3 +101,89 @@ def test_build_f4가_원본_인덱스를_유지한_프레임에서도_동작한�
     }, index=[42])
     tr4, te4 = models._build_f4(tr, te)
     assert tr4.iloc[0]["analog_mean_d1"] < 5.0
+
+
+# --- 리뷰 반영: assert_train_before_test (Minor 4) ---
+
+def test_assert_train_before_test가_정상_분할은_통과시킨다():
+    tr = pd.DataFrame({"date": pd.to_datetime(["2024-01-01", "2024-01-05"])})
+    te = pd.DataFrame({"date": pd.to_datetime(["2024-02-01", "2024-02-02"])})
+    models.assert_train_before_test(tr, te)  # 예외 없이 통과해야 한다
+
+
+def test_assert_train_before_test가_시간_역전을_잡아낸다():
+    tr = pd.DataFrame({"date": pd.to_datetime(["2024-01-01", "2024-03-01"])})
+    te = pd.DataFrame({"date": pd.to_datetime(["2024-02-01", "2024-02-15"])})
+    with pytest.raises(ValueError):
+        models.assert_train_before_test(tr, te)
+
+
+def test_assert_train_before_test가_빈_프레임은_통과시킨다():
+    tr = pd.DataFrame({"date": pd.to_datetime(["2024-01-01"])})
+    te = pd.DataFrame({"date": pd.to_datetime([])})
+    models.assert_train_before_test(tr, te)
+    models.assert_train_before_test(te, tr)
+
+
+# --- 리뷰 반영: evaluate()가 상수 예측에 IC를 NaN으로 낸다 (Important 1) ---
+
+def test_evaluate가_예측이_상수면_ic를_NaN으로_낸다():
+    df = toy()
+    te = df.iloc[300:].reset_index(drop=True)
+    out = {"pred_reg": np.zeros(len(te)), "prob_raw": np.full(len(te), 0.5),
+          "prob_cal": np.full(len(te), 0.5)}
+    m = models.evaluate(te, out)
+    assert np.isnan(m["ic"])
+    assert np.isnan(m["ic_t"])
+
+
+def test_evaluate가_예측에_변동이_있으면_ic가_숫자다():
+    df = toy(n=1200, seed=1)
+    te = df.iloc[900:].reset_index(drop=True)
+    out = models.fit_predict(df.iloc[:900], te, ["f1", "f2"])
+    m = models.evaluate(te, out)
+    assert not np.isnan(m["ic"])
+
+
+# --- 리뷰 반영: 학습/검정 예측을 함께 내는 내부 함수 (과적합 진단용) ---
+
+def test_fit_predict_train_test가_학습_검정_예측을_모두_낸다():
+    df = toy(n=1200, seed=1)
+    tr = df.iloc[:900].reset_index(drop=True)
+    te = df.iloc[900:].reset_index(drop=True)
+    train_out, test_out = models._fit_predict_train_test(tr, te, ["f1", "f2"])
+    assert len(train_out["pred_reg"]) == len(tr)
+    assert len(test_out["pred_reg"]) == len(te)
+    for out in (train_out, test_out):
+        assert set(out.keys()) == {"pred_reg", "prob_raw", "prob_cal"}
+
+
+def test_fit_predict가_fit_predict_train_test의_검정쪽과_일치한다():
+    df = toy(n=1200, seed=1)
+    tr = df.iloc[:900].reset_index(drop=True)
+    te = df.iloc[900:].reset_index(drop=True)
+    out1 = models.fit_predict(tr, te, ["f1", "f2"])
+    _, out2 = models._fit_predict_train_test(tr, te, ["f1", "f2"])
+    assert np.allclose(out1["pred_reg"], out2["pred_reg"])
+
+
+# --- 리뷰 반영: 부트스트랩 CI·p값 헬퍼 (Important 2) ---
+
+def test_bootstrap_delta_stats가_평균과_CI와_p값을_낸다():
+    vals = [0.01, 0.02, 0.015, 0.005]
+    out = models._bootstrap_delta_stats(vals, n=200)
+    assert out["delta"] == pytest.approx(np.mean(vals))
+    assert out["ci_lo"] <= out["delta"] <= out["ci_hi"]
+    assert 0.0 <= out["p_value"] <= 1.0
+
+
+def test_bootstrap_paired_auc_delta가_필요한_키를_모두_낸다():
+    rng = np.random.default_rng(0)
+    y = rng.integers(0, 2, 200)
+    a = rng.uniform(size=200)
+    b = np.clip(a + 0.2 * (y - 0.5), 0, 1)  # b가 y와 더 잘 맞도록 구성
+    out = models.bootstrap_paired_auc_delta(y, a, b, n=200)
+    for k in ("delta", "ci_lo", "ci_hi", "p_value", "frac_a_better", "n_boot"):
+        assert k in out
+    assert out["ci_lo"] <= out["delta"] <= out["ci_hi"]
+    assert out["delta"] > 0  # b가 뚜렷이 더 나으므로 양의 델타여야 한다

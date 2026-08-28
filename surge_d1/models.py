@@ -1,5 +1,16 @@
 # -*- coding: utf-8 -*-
-"""M0~M5 학습·평가와 ablation 실행. 스펙 §7.1, §7.4, §7.6."""
+"""M0~M5 학습·평가와 ablation 실행. 스펙 §7.1, §7.4, §7.6.
+
+리뷰 반영 이력(Task 11):
+- Important 1: evaluate()가 회귀 예측이 상수로 붕괴한 경우 ic/ic_t를
+  NaN으로 낸다(0.0과 "정의되지 않음"을 CSV에서 구분).
+- Important 2: 사다리 각 단계(M0→M1→...→M4, M4prime→M5)의 AUC 개선폭에
+  부트스트랩 CI·p값을 붙이고, 다섯 비교 전체에 BH 다중검정 보정을 적용.
+- Minor 3: isotonic 보정도 LightGBM과 동일한 sample_weight로 적합.
+- Minor 4: assert_train_before_test 단위 테스트 추가(tests/test_models.py).
+- 추가 지시: 학습-검정 성능 격차(과적합 진단), 폴드별 부호 일관성,
+  피처 수 대비 학습 표본 크기를 ablation.csv에 기록.
+"""
 from __future__ import annotations
 
 import sys
@@ -26,10 +37,11 @@ def assert_train_before_test(train_df: pd.DataFrame, test_df: pd.DataFrame) -> N
     """학습 최대일이 검정 최소일보다 앞서는지 검증한다.
 
     walk-forward를 쓰는 모든 호출 지점(run_ablation, run_leakage_comparison의
-    walk_forward 분기)에서 명시적으로 호출한다 — 스플리터 구현을 신뢰만
-    하지 않고 실제로 검증한다. fit_predict 자체에는 넣지 않는다: 셔플
-    K-fold 누수 비교(§7.6)는 의도적으로 이 순서를 어기는 것이 측정
-    대상이고, 단위 테스트의 장난감 데이터도 시간순 분할이 아니기 때문이다.
+    walk_forward 분기, _catalyst_fold)에서 명시적으로 호출한다 — 스플리터
+    구현을 신뢰만 하지 않고 실제로 검증한다. fit_predict 자체에는 넣지
+    않는다: 셔플 K-fold 누수 비교(§7.6)는 의도적으로 이 순서를 어기는
+    것이 측정 대상이고, 단위 테스트의 장난감 데이터도 시간순 분할이
+    아니기 때문이다.
     """
     if len(train_df) == 0 or len(test_df) == 0:
         return
@@ -42,17 +54,28 @@ def assert_train_before_test(train_df: pd.DataFrame, test_df: pd.DataFrame) -> N
         )
 
 
-def fit_predict(train_df: pd.DataFrame, test_df: pd.DataFrame,
-                feats: list[str], use_weight: bool = True,
-                label_reg: str = "y_raw") -> dict:
-    """회귀·분류 학습 후 예측. feats가 비면 M0(상수 예측)."""
-    n_test = len(test_df)
+def _fit_predict_train_test(train_df: pd.DataFrame, test_df: pd.DataFrame,
+                            feats: list[str], use_weight: bool = True,
+                            label_reg: str = "y_raw"
+                            ) -> tuple[dict, dict]:
+    """실제 모델 적합은 한 번만 하고, 학습·검정 양쪽에 대한 예측을 함께 낸다.
+
+    fit_predict()의 공개 계약(키 pred_reg/prob_raw/prob_cal)은 검정 쪽
+    결과만 노출한다 — 학습 쪽 예측은 run_ablation의 과적합 진단
+    (학습-검정 성능 격차)에만 쓴다. 재적합하지 않고 같은 reg/clf/iso로
+    Xtr·Xte 양쪽을 predict하므로 추가 학습 비용은 없다.
+    """
+    n_train, n_test = len(train_df), len(test_df)
     if not feats:
         base_ret = float(train_df[label_reg].mean())
         base_p = float(train_df["y_cls"].mean())
-        return {"pred_reg": np.full(n_test, base_ret),
-                "prob_raw": np.full(n_test, base_p),
-                "prob_cal": np.full(n_test, base_p)}
+        train_out = {"pred_reg": np.full(n_train, base_ret),
+                     "prob_raw": np.full(n_train, base_p),
+                     "prob_cal": np.full(n_train, base_p)}
+        test_out = {"pred_reg": np.full(n_test, base_ret),
+                    "prob_raw": np.full(n_test, base_p),
+                    "prob_cal": np.full(n_test, base_p)}
+        return train_out, test_out
 
     banned = set(feats) & dataset.BANNED_AS_FEATURE
     if banned:
@@ -66,25 +89,55 @@ def fit_predict(train_df: pd.DataFrame, test_df: pd.DataFrame,
 
     reg = LGBMRegressor(**REG_PARAMS)
     reg.fit(Xtr, train_df[label_reg].to_numpy(dtype=float), sample_weight=w)
-    pred_reg = reg.predict(Xte)
+    pred_reg_tr = reg.predict(Xtr)
+    pred_reg_te = reg.predict(Xte)
 
     clf = LGBMClassifier(**CLF_PARAMS)
     ytr = train_df["y_cls"].to_numpy(dtype=int)
     clf.fit(Xtr, ytr, sample_weight=w)
-    prob_raw = clf.predict_proba(Xte)[:, 1]
+    prob_raw_tr = clf.predict_proba(Xtr)[:, 1]
+    prob_raw_te = clf.predict_proba(Xte)[:, 1]
 
     # 확률 보정: 학습 구간 내부 예측으로 isotonic을 적합 (스펙 §7.4)
-    prob_tr = clf.predict_proba(Xtr)[:, 1]
+    # 리뷰 Minor 3: LightGBM 두 모델은 sample_weight=w로 학습하는데
+    # isotonic만 가중치 없이 적합하면 보정이 모델과 어긋난다 — 동일한
+    # w를 넘겨 일관시킨다.
     iso = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
-    iso.fit(prob_tr, ytr)
-    prob_cal = np.clip(iso.predict(prob_raw), 0.0, 1.0)
+    iso.fit(prob_raw_tr, ytr, sample_weight=w)
+    prob_cal_tr = np.clip(iso.predict(prob_raw_tr), 0.0, 1.0)
+    prob_cal_te = np.clip(iso.predict(prob_raw_te), 0.0, 1.0)
 
-    return {"pred_reg": pred_reg, "prob_raw": prob_raw, "prob_cal": prob_cal}
+    train_out = {"pred_reg": pred_reg_tr, "prob_raw": prob_raw_tr, "prob_cal": prob_cal_tr}
+    test_out = {"pred_reg": pred_reg_te, "prob_raw": prob_raw_te, "prob_cal": prob_cal_te}
+    return train_out, test_out
+
+
+def fit_predict(train_df: pd.DataFrame, test_df: pd.DataFrame,
+                feats: list[str], use_weight: bool = True,
+                label_reg: str = "y_raw") -> dict:
+    """회귀·분류 학습 후 예측. feats가 비면 M0(상수 예측)."""
+    _, test_out = _fit_predict_train_test(train_df, test_df, feats, use_weight, label_reg)
+    return test_out
 
 
 def evaluate(test_df: pd.DataFrame, out: dict,
              label_reg: str = "y_raw") -> dict:
-    """검정 구간 지표. 스펙 §7.5."""
+    """검정(또는 학습) 구간 지표. 스펙 §7.5.
+
+    test_df 인자는 이름과 달리 학습 구간 프레임을 넣어도 그대로
+    작동한다(run_ablation이 과적합 진단을 위해 학습 구간에도 이 함수를
+    재사용한다) — date/y_cls/label_reg 컬럼만 있으면 된다.
+
+    리뷰 Important 1: 재료 표본(M4prime/M5)처럼 회귀 모델이 상수 예측으로
+    붕괴하면(작은 표본 + 강한 정규화 조합) 순위상관 자체가 정의되지
+    않는다. validate.spearman_ic는 이런 경우 날짜별로 nunique<2인 날을
+    모두 걸러내고 최종적으로 (0.0, 0.0) 폴백을 반환하도록 설계돼 있는데,
+    이를 그대로 CSV에 실으면 "측정된 상관 0"과 "애초에 측정 불가"가
+    구분되지 않는다 — 플로팅 스크립트나 슬라이드가 그대로 "IC=0.000"을
+    실측치처럼 보여줄 위험이 있다. 여기서 pred_reg의 전역 변동을 먼저
+    확인해, 상수 예측이면 ic/ic_t를 NaN으로 남겨 그 구분이 CSV까지
+    살아남게 한다.
+    """
     y = test_df[label_reg].to_numpy(dtype=float)
     ycls = test_df["y_cls"].to_numpy(dtype=int)
     dates = test_df["date"]
@@ -94,8 +147,13 @@ def evaluate(test_df: pd.DataFrame, out: dict,
     else:
         auc = float(roc_auc_score(ycls, out["prob_cal"]))
     brier = float(brier_score_loss(ycls, out["prob_cal"]))
-    ic, ic_t = validate.spearman_ic(y, out["pred_reg"], dates)
-    top = validate.top_decile_return(y, out["pred_reg"], dates)
+
+    pred_reg = np.asarray(out["pred_reg"], dtype=float)
+    if np.unique(pred_reg).size < 2:
+        ic, ic_t = float("nan"), float("nan")
+    else:
+        ic, ic_t = validate.spearman_ic(y, pred_reg, dates)
+    top = validate.top_decile_return(y, pred_reg, dates)
     return {"auc": auc, "brier": brier, "ic": ic, "ic_t": ic_t,
             "top_decile": top, "n": int(len(test_df))}
 
@@ -111,6 +169,11 @@ def _build_f4(train_df: pd.DataFrame, test_df: pd.DataFrame
     exclude_key=그 행 자신의 인덱스 라벨을 넘긴다(features_f4.py의
     "Task 11 호출 규약" 참조) — 학습 행에서 이를 빠뜨리면 예외도 경고도
     없이 그 행 자신의 d1이 analog_mean_d1/type_prior로 새어 들어온다.
+
+    이 exclude_key 적용은 train_df/test_df 양쪽에 동일하게 걸리므로,
+    나중에 학습 구간(tr4)에 대해 과적합 진단용 지표를 낼 때도(§ 위
+    evaluate 재사용) 자기포함 누수 없이 만들어진 F4를 그대로 쓰게 된다
+    — 별도 조치가 필요 없다.
     """
     idx = features_f4.CatalystIndex().fit(
         train_df.loc[train_df["has_catalyst"] == 1, ["ctype", "reason", "d1"]])
@@ -124,9 +187,40 @@ def _build_f4(train_df: pd.DataFrame, test_df: pd.DataFrame
     return apply(train_df), apply(test_df)
 
 
+def _catalyst_fold(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """재료 표본 60/40 시간 분할.
+
+    run_ablation과 compute_ablation_deltas가 정확히 같은 분할을
+    재현하도록 공유한다. 인덱스를 reset하지 않는다 — _build_f4의
+    exclude_key가 원본 인덱스 라벨로 자기 자신을 찾아야 하기 때문이다.
+    """
+    cat = df[df["has_catalyst"] == 1]
+    split = cat["date"].quantile(0.6)
+    tr = cat[cat["date"] < split]
+    te = cat[cat["date"] >= split]
+    assert_train_before_test(tr, te)
+    return tr, te
+
+
 def run_ablation(df: pd.DataFrame) -> pd.DataFrame:
-    """M0~M4는 전체 표본 4폴드, M4prime/M5는 재료 표본 단일 폴드."""
+    """M0~M4는 전체 표본 4폴드, M4prime/M5는 재료 표본 단일 폴드.
+
+    각 모델·폴드마다 검정 지표뿐 아니라 같은 모델의 학습 구간 지표도
+    함께 내 train_*, gap_*(=학습-검정) 컬럼으로 과적합을 직접 잰다.
+    n_features/n_train도 함께 기록해 "피처 수 대비 표본 크기"를 결과표
+    자체에서 읽을 수 있게 한다.
+    """
     results = []
+
+    def _row(name, fold, year, sample, feats, n_train_, test_m, train_m):
+        row = {"model": name, "fold": fold, "test_year": year, "sample": sample,
+              "n_features": len(feats), "n_train": n_train_, **test_m}
+        for k in ("auc", "brier", "ic", "ic_t", "top_decile", "n"):
+            row[f"train_{k}"] = train_m[k]
+        row["gap_auc"] = train_m["auc"] - test_m["auc"]
+        row["gap_ic"] = train_m["ic"] - test_m["ic"]
+        row["gap_top_decile"] = train_m["top_decile"] - test_m["top_decile"]
+        return row
 
     folds = validate.walk_forward_folds(df["date"], TEST_YEARS)
     for fi, (tr_mask, te_mask) in enumerate(folds, 1):
@@ -135,10 +229,13 @@ def run_ablation(df: pd.DataFrame) -> pd.DataFrame:
         year = int(te["date"].dt.year.mode()[0])
         for name in ("M0", "M1", "M2", "M3", "M4"):
             feats = [] if name == "M0" else dataset.FEATURE_SETS[name]
-            out = fit_predict(tr, te, feats)
-            results.append({"model": name, "fold": fi, "test_year": year,
-                            "sample": "full", **evaluate(te, out)})
-            print(f"  {name} fold{fi}({year}) 완료", flush=True)
+            train_out, test_out = _fit_predict_train_test(tr, te, feats)
+            test_m = evaluate(te, test_out)
+            train_m = evaluate(tr, train_out)
+            results.append(_row(name, fi, year, "full", feats, len(tr), test_m, train_m))
+            print(f"  {name} fold{fi}({year}) 완료 "
+                 f"(n_feat={len(feats)}, n_train={len(tr)}, gap_auc={train_m['auc']-test_m['auc']:+.4f})",
+                 flush=True)
 
     # 재료 표본: M4prime vs M5
     #
@@ -148,26 +245,158 @@ def run_ablation(df: pd.DataFrame) -> pd.DataFrame:
     # 깨진다 — **파라미터는 고정한 채 두고, 표본 크기(n)를 결과표와
     # 리포트에 크게 적어 결론의 강도를 스스로 낮춘다.**
     # M5가 M4prime을 이겨도 이 표본에서는 잠정적 증거일 뿐이다.
-    #
-    # 인덱스를 reset하지 않는다 — _build_f4가 exclude_key로 자기 자신을
-    # 배제하려면 원본 df의 유일한 행 인덱스가 그대로 보존돼야 한다.
     cat = df[df["has_catalyst"] == 1]
     if len(cat) > 200:
-        split = cat["date"].quantile(0.6)
-        tr = cat[cat["date"] < split]
-        te = cat[cat["date"] >= split]
-        assert_train_before_test(tr, te)
+        tr, te = _catalyst_fold(df)
         tr4, te4 = _build_f4(tr, te)
         for name, feats in (("M4prime", dataset.FEATURE_SETS["M4"]),
                             ("M5", dataset.FEATURE_SETS["M5"])):
-            out = fit_predict(tr4, te4, feats)
-            results.append({"model": name, "fold": 1,
-                            "test_year": int(te["date"].dt.year.min()),
-                            "sample": "catalyst", **evaluate(te4, out)})
-            print(f"  {name} (재료 표본, n_train={len(tr4)}, n_test={len(te4)}) 완료",
+            train_out, test_out = _fit_predict_train_test(tr4, te4, feats)
+            test_m = evaluate(te4, test_out)
+            train_m = evaluate(tr4, train_out)
+            results.append(_row(name, 1, int(te["date"].dt.year.min()), "catalyst",
+                                feats, len(tr4), test_m, train_m))
+            print(f"  {name} (재료 표본, n_feat={len(feats)}, n_train={len(tr4)}, "
+                 f"n_test={len(te4)}, gap_auc={train_m['auc']-test_m['auc']:+.4f}) 완료",
                  flush=True)
 
     return pd.DataFrame(results)
+
+
+def _bootstrap_delta_stats(values, n: int = 2000,
+                           seed: int = config.RANDOM_SEED) -> dict:
+    """폴드별 델타 배열의 평균에 대한 부트스트랩 CI와 양측 p값.
+
+    CI는 validate.bootstrap_ci(평균의 부트스트랩)를 그대로 쓴다. p값은
+    같은 리샘플 절차를 동일 시드로 재현해, 리샘플된 평균이 0 이하/이상인
+    비율로 낸다 — 부트스트랩 CI가 0을 포함하는지와 사실상 동치인
+    양측검정이다.
+    """
+    v = np.asarray(values, dtype=float)
+    v = v[np.isfinite(v)]
+    if v.size == 0:
+        return {"delta": float("nan"), "ci_lo": float("nan"),
+                "ci_hi": float("nan"), "p_value": float("nan")}
+    observed = float(v.mean())
+    ci_lo, ci_hi = validate.bootstrap_ci(v, n=n, seed=seed)
+    if v.size == 1:
+        return {"delta": observed, "ci_lo": ci_lo, "ci_hi": ci_hi,
+                "p_value": float("nan")}
+    rng = np.random.default_rng(seed)
+    means = rng.choice(v, size=(n, v.size), replace=True).mean(axis=1)
+    frac_le0 = float((means <= 0).mean())
+    frac_ge0 = float((means >= 0).mean())
+    p = float(min(1.0, 2 * min(frac_le0, frac_ge0)))
+    return {"delta": observed, "ci_lo": ci_lo, "ci_hi": ci_hi, "p_value": p}
+
+
+def bootstrap_paired_auc_delta(y_cls, prob_a, prob_b, n: int = 2000,
+                               seed: int = config.RANDOM_SEED) -> dict:
+    """짝지은(paired) 행 리샘플로 AUC 차이(b-a)의 분포를 낸다.
+
+    AUC는 행별 값의 평균으로 분해되지 않는 순위 통계라
+    validate.bootstrap_ci(평균의 부트스트랩)를 그대로 적용할 수 없다.
+    대신 같은 인덱스로 두 모델의 예측·정답을 함께 리샘플해 AUC를 각각
+    다시 계산하고, 그 차이의 분포에서 백분위수 CI와 부트스트랩 양측
+    p값을 얻는다. M4prime→M5처럼 폴드가 하나뿐인 비교에 쓴다.
+    """
+    y = np.asarray(y_cls, dtype=int)
+    a = np.asarray(prob_a, dtype=float)
+    b = np.asarray(prob_b, dtype=float)
+    m = len(y)
+    rng = np.random.default_rng(seed)
+    diffs = []
+    for _ in range(n):
+        idx = rng.integers(0, m, size=m)
+        yi = y[idx]
+        if len(np.unique(yi)) < 2:
+            continue
+        diffs.append(float(roc_auc_score(yi, b[idx]) - roc_auc_score(yi, a[idx])))
+    diffs = np.asarray(diffs, dtype=float)
+    ci_lo, ci_hi = float(np.quantile(diffs, 0.025)), float(np.quantile(diffs, 0.975))
+    frac_a_better = float((diffs < 0).mean())
+    frac_b_better = float((diffs > 0).mean())
+    p = float(min(1.0, 2 * min(frac_a_better, frac_b_better)))
+    observed = float(roc_auc_score(y, b) - roc_auc_score(y, a))
+    return {"delta": observed, "ci_lo": ci_lo, "ci_hi": ci_hi, "p_value": p,
+            "frac_a_better": frac_a_better, "n_boot": int(diffs.size)}
+
+
+def compute_ablation_deltas(df: pd.DataFrame, ablation_df: pd.DataFrame) -> pd.DataFrame:
+    """사다리(M0→M1→...→M4)와 M4prime→M5, 각 단계에 부트스트랩 CI·p값·
+    폴드별 부호 일관성을 붙인다. 스펙 §7.6이 요구하는 "개선에는 불확실성이
+    따라와야 한다"를 AUC(주 지표) 기준으로 구현한다.
+
+    BH 다중검정 보정(validate.benjamini_hochberg)은 이 다섯 AUC 비교
+    전체에만 적용한다 — 다섯 번 검정하면 우연히 하나는 유의하게 나올 수
+    있어서다. IC 델타는 참고용으로 같은 표에 남기되(리뷰가 지적한
+    M2→M3의 IC 악화를 결과표에서 바로 보이게 하려는 목적) BH 보정
+    대상(5개 AUC 검정)에는 포함하지 않는다 — 별도 가족이다.
+    """
+    full = ablation_df[ablation_df["sample"] == "full"]
+    ladder = [("M0", "M1"), ("M1", "M2"), ("M2", "M3"), ("M3", "M4")]
+    rows = []
+
+    for a, b in ladder:
+        pa = full[full["model"] == a].set_index("fold")["auc"].sort_index()
+        pb = full[full["model"] == b].set_index("fold")["auc"].sort_index()
+        common = pa.index.intersection(pb.index)
+        fold_deltas = pb.loc[common] - pa.loc[common]
+        stats = _bootstrap_delta_stats(fold_deltas.to_numpy())
+        n_pos, n_tot = int((fold_deltas > 0).sum()), int(fold_deltas.size)
+        rows.append({
+            "step": f"{a}->{b}", "metric": "auc", "n_fold": n_tot, "n_row": None,
+            "delta": stats["delta"], "ci_lo": stats["ci_lo"], "ci_hi": stats["ci_hi"],
+            "p_value_raw": stats["p_value"],
+            "sign_pos": n_pos, "sign_total": n_tot, "sign_ratio": f"{n_pos}/{n_tot}",
+            "fold_deltas": ";".join(f"fold{k}:{v:+.4f}" for k, v in fold_deltas.items()),
+        })
+
+        # 참고용 IC 델타 — BH 보정 대상에는 넣지 않는다(별도 가족).
+        pa_ic = full[full["model"] == a].set_index("fold")["ic"].sort_index()
+        pb_ic = full[full["model"] == b].set_index("fold")["ic"].sort_index()
+        common_ic = pa_ic.index.intersection(pb_ic.index)
+        ic_deltas = (pb_ic.loc[common_ic] - pa_ic.loc[common_ic]).dropna()
+        if len(ic_deltas):
+            ic_stats = _bootstrap_delta_stats(ic_deltas.to_numpy())
+            n_pos_ic, n_tot_ic = int((ic_deltas > 0).sum()), int(ic_deltas.size)
+            rows.append({
+                "step": f"{a}->{b}", "metric": "ic", "n_fold": n_tot_ic, "n_row": None,
+                "delta": ic_stats["delta"], "ci_lo": ic_stats["ci_lo"],
+                "ci_hi": ic_stats["ci_hi"], "p_value_raw": ic_stats["p_value"],
+                "sign_pos": n_pos_ic, "sign_total": n_tot_ic,
+                "sign_ratio": f"{n_pos_ic}/{n_tot_ic}",
+                "fold_deltas": ";".join(f"fold{k}:{v:+.4f}" for k, v in ic_deltas.items()),
+            })
+
+    # 재료 표본: 폴드가 하나뿐이라 위(폴드 간) 부트스트랩을 못 쓴다 —
+    # 대신 행 단위 짝지은 부트스트랩을 쓴다. run_ablation과 동일한 분할을
+    # 재현해 원 예측값을 다시 얻는다(재학습 비용은 전체 실행시간 대비 작다).
+    tr, te = _catalyst_fold(df)
+    tr4, te4 = _build_f4(tr, te)
+    _, out_prime = _fit_predict_train_test(tr4, te4, dataset.FEATURE_SETS["M4"])
+    _, out_m5 = _fit_predict_train_test(tr4, te4, dataset.FEATURE_SETS["M5"])
+    ycls = te4["y_cls"].to_numpy(dtype=int)
+    cat_stats = bootstrap_paired_auc_delta(ycls, out_prime["prob_cal"], out_m5["prob_cal"])
+    p_perm = validate.permutation_pvalue(
+        lambda y, p, d: roc_auc_score(y, p), ycls,
+        out_prime["prob_cal"], out_m5["prob_cal"], te4["date"],
+        n=2000, seed=config.RANDOM_SEED)
+    rows.append({
+        "step": "M4prime->M5", "metric": "auc", "n_fold": None, "n_row": int(len(ycls)),
+        "delta": cat_stats["delta"], "ci_lo": cat_stats["ci_lo"], "ci_hi": cat_stats["ci_hi"],
+        "p_value_raw": cat_stats["p_value"],
+        "sign_pos": None, "sign_total": None,
+        "sign_ratio": f"부트스트랩 중 M5 우위 비율={1 - cat_stats['frac_a_better']:.3f}",
+        "fold_deltas": f"n_boot={cat_stats['n_boot']};perm_p_onesided={p_perm:.4f}",
+    })
+
+    out = pd.DataFrame(rows)
+    auc_mask = out["metric"] == "auc"
+    out["p_value_bh"] = np.nan
+    out.loc[auc_mask, "p_value_bh"] = validate.benjamini_hochberg(
+        out.loc[auc_mask, "p_value_raw"].tolist())
+    return out
 
 
 def run_leakage_comparison(df: pd.DataFrame) -> pd.DataFrame:
@@ -215,6 +444,19 @@ def main() -> int:
     ab = run_ablation(df)
     ab.to_csv(config.RESULTS_DIR / "ablation.csv", index=False, encoding="utf-8-sig")
     print(ab.groupby("model")[["auc", "ic", "top_decile"]].mean().to_string())
+
+    print("\n=== 학습-검정 성능 격차 (과적합 진단) ===")
+    gap_full = ab[ab["sample"] == "full"].groupby("model")[
+        ["n_features", "auc", "train_auc", "gap_auc", "ic", "train_ic", "gap_ic"]].mean()
+    print(gap_full.to_string())
+    gap_cat = ab[ab["sample"] == "catalyst"].set_index("model")[
+        ["n_features", "n_train", "auc", "train_auc", "gap_auc"]]
+    print(gap_cat.to_string())
+
+    print("\n=== ablation 사다리 단계별 델타 (부트스트랩 CI·p값·BH 보정) ===")
+    deltas = compute_ablation_deltas(df, ab)
+    deltas.to_csv(config.RESULTS_DIR / "ablation_deltas.csv", index=False, encoding="utf-8-sig")
+    print(deltas.to_string(index=False))
 
     print("\n=== 누수 편향 비교 ===")
     lk = run_leakage_comparison(df)
