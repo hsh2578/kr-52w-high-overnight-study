@@ -11,6 +11,7 @@ def test_상수값이_스펙과_일치한다():
     assert config.VOLUME_SURGE_MULT == 1.5
     assert config.MIN_BAR_INDEX == 260
     assert config.HALT_LOOKBACK == 5
+    assert config.MAX_DAILY_MOVE == 0.32
     assert config.EMBARGO_DAYS == 5
     assert config.RANDOM_SEED == 42
 

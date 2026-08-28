@@ -34,6 +34,13 @@ def is_breakout(df: pd.DataFrame, i: int) -> bool:
     if not np.isfinite(c) or not np.isfinite(v) or c <= 0:
         return False
 
+    # 가격제한 위반 봉 배제: 캐시에 섞인 오류 데이터(예: 037460 2026-05-15,
+    # 계산상 +32.05%이나 재료 CSV엔 +29.97%로 기록됨)를 이벤트로 보지 않는다.
+    prev_c = float(df["Close"].iloc[i - 1])
+    if np.isfinite(prev_c) and prev_c > 0:
+        if abs(c / prev_c - 1.0) > config.MAX_DAILY_MOVE:
+            return False
+
     prior_high = float(df["Close"].iloc[i - config.HIGH_52W_PERIOD:i].max())
     if not (c > prior_high):
         return False
@@ -48,21 +55,42 @@ def is_breakout(df: pd.DataFrame, i: int) -> bool:
 
 
 def labels(df: pd.DataFrame, i: int, cost: float = config.COST) -> dict:
-    """봉 i 종가 매수 기준 라벨 3종. 스펙 §6.
+    """봉 i 종가 매수 기준 라벨. 스펙 §6.
 
-    y_raw  = (Open[i+1]-Close[i])/Close[i] - cost   (익일 시가청산)
-    y_hold = (Close[i+1]-Close[i])/Close[i] - cost  (익일 종가청산)
-    y_cls  = 1 if y_raw > 0 else 0
+    y_raw    = (Open[i+1]-Close[i])/Close[i] - cost    (익일 시가청산, 비용차감)
+    y_hold   = (Close[i+1]-Close[i])/Close[i] - cost   (익일 종가청산, 비용차감)
+    y_hold20 = (Close[i+20]-Close[i])/Close[i] - cost  (20봉 보유, 비용차감)
+               i+20이 시계열 끝을 넘어가면 NaN — 그렇다고 이벤트 자체를 버리면
+               최근 한 달치(라이브 데모에서 가장 보고 싶은 구간)가 통째로
+               사라지므로, y_hold20만 NaN으로 두고 이벤트는 그대로 남긴다.
+    y_cls    = 1 if y_raw > 0 else 0                   (학습 타깃, 비용차감 기준)
+    y_up     = 1 if Open[i+1] > Close[i] else 0         (집계 전용, 비용 미차감)
+               y_cls와 y_up이 둘 다 필요한 이유: 0.1% 오른 거래는 비용(0.21%)을
+               못 이기고 실제로는 손실이므로 학습 타깃(y_cls)은 비용을 반드시
+               차감해야 한다. 반면 y_up은 "익일 상승 확률 X% vs 익일 순이익
+               확률 Y%"를 리포트에서 나란히 보여주기 위한 값으로, 그 자체가
+               학습에 쓰이지는 않는다 — 둘의 차이(X-Y)가 이 전략의 실질적인
+               발견이므로 어느 한쪽으로 "단순화"해 없애면 안 된다.
     """
     c = float(df["Close"].iloc[i])
     o1 = float(df["Open"].iloc[i + 1])
     c1 = float(df["Close"].iloc[i + 1])
     y_raw = (o1 - c) / c - cost if (c > 0 and o1 > 0) else np.nan
     y_hold = (c1 - c) / c - cost if (c > 0 and c1 > 0) else np.nan
+    y_up = int(o1 > c) if (c > 0 and o1 > 0) else 0
+
+    if i + 20 < len(df):
+        c20 = float(df["Close"].iloc[i + 20])
+        y_hold20 = (c20 - c) / c - cost if (c > 0 and c20 > 0) else np.nan
+    else:
+        y_hold20 = np.nan
+
     return {
         "y_raw": y_raw,
         "y_hold": y_hold,
+        "y_hold20": y_hold20,
         "y_cls": int(y_raw > 0) if np.isfinite(y_raw) else 0,
+        "y_up": y_up,
     }
 
 

@@ -22,7 +22,7 @@ def make_df(n=300, close_base=100.0, vol=1000.0):
 def test_is_breakout_직전5봉에_거래정지가_있으면_False():
     df = make_df()
     i = len(df) - 2
-    df.loc[df.index[i], "Close"] = 200.0
+    df.loc[df.index[i], "Close"] = 128.0     # +28% — 가격제한(0.32) 이내
     df.loc[df.index[i], "Volume"] = 1e9
     assert events.is_breakout(df, i) is True          # 정지 없으면 통과
     df.loc[df.index[i - 2], "halted"] = True
@@ -32,7 +32,7 @@ def test_is_breakout_직전5봉에_거래정지가_있으면_False():
 def test_is_breakout_익일이_거래정지면_False():
     df = make_df()
     i = len(df) - 2
-    df.loc[df.index[i], "Close"] = 200.0
+    df.loc[df.index[i], "Close"] = 128.0     # +28% — 가격제한(0.32) 이내
     df.loc[df.index[i], "Volume"] = 1e9
     df.loc[df.index[i + 1], "halted"] = True
     assert events.is_breakout(df, i) is False
@@ -45,8 +45,8 @@ def test_is_breakout_신고가와_거래량과_거래대금을_모두_요구한�
     assert events.is_breakout(df, i) is False
 
     # 신고가 + 거래량 2배 + 거래대금 충분
-    df.loc[df.index[i], "Close"] = 200.0
-    df.loc[df.index[i], "Volume"] = 1e9      # 200 * 1e9 = 2e11 > 1e10
+    df.loc[df.index[i], "Close"] = 128.0     # +28% — 가격제한(0.32) 이내
+    df.loc[df.index[i], "Volume"] = 1e9      # 128 * 1e9 = 1.28e11 > 1e10
     assert events.is_breakout(df, i) is True
 
     # 거래량만 부족하면 False
@@ -118,7 +118,7 @@ def test_load_excluded_codes_마스터가_없으면_빈집합(monkeypatch, tmp_p
 def test_collect_events_제외집합에_있으면_빠지고_모르는코드는_남는다():
     df = make_df()
     i = len(df) - 2
-    df.loc[df.index[i], "Close"] = 200.0
+    df.loc[df.index[i], "Close"] = 128.0     # +28% — 가격제한(0.32) 이내
     df.loc[df.index[i], "Volume"] = 1e9
 
     # 제외 대상(우선주)
@@ -137,3 +137,68 @@ def test_add_market_adjusted_그날_중앙값을_뺀다():
     out = events.add_market_adjusted(ev)
     # 1/2 중앙값 0.02 → -0.01, 0.0, 0.01 / 1/3은 단일이라 0.0
     assert list(out["y_mkt"].round(6)) == [-0.01, 0.0, 0.01, 0.0]
+
+
+# --- 추가 1: y_hold20 (20봉 보유 수익률) — 이벤트 자격 게이트가 아니다 ---
+
+def test_labels_y_hold20_20봉뒤_수익률을_계산한다():
+    df = make_df(n=300)
+    i = 200  # i+20 = 220 < 300, 미래 데이터 충분
+    df.loc[df.index[i], "Close"] = 100.0
+    df.loc[df.index[i + 20], "Close"] = 110.0
+    out = events.labels(df, i)
+    assert out["y_hold20"] == pytest.approx((110.0 - 100.0) / 100.0 - config.COST)
+
+
+def test_labels_y_hold20_미래봉없으면_NaN이지만_다른_라벨은_정상():
+    df = make_df()
+    i = len(df) - 2
+    df.loc[df.index[i], "Close"] = 100.0
+    df.loc[df.index[i + 1], "Open"] = 105.0
+    df.loc[df.index[i + 1], "Close"] = 95.0
+    out = events.labels(df, i)
+    assert np.isnan(out["y_hold20"])
+    assert out["y_raw"] == pytest.approx(0.05 - config.COST)
+
+
+def test_collect_events_20봉_미래가_없어도_이벤트는_생성되고_y_hold20만_NaN():
+    """시계열 맨 끝 이벤트를 20봉 미래가 없다고 통째로 버리면 최근 한달치 이벤트가
+    전부 사라진다 — 라이브 데모에서 가장 보고 싶은 구간이라 반드시 살려야 한다."""
+    df = make_df()
+    i = len(df) - 2
+    df.loc[df.index[i], "Close"] = 128.0
+    df.loc[df.index[i], "Volume"] = 1e9
+    ev = events.collect_events({"000001": df}, exclude=None)
+    assert len(ev) == 1
+    assert np.isnan(ev.loc[0, "y_hold20"])
+
+
+# --- 추가 2: y_up (비용 미차감 총상승 지표, 집계 전용) ---
+
+def test_labels_y_up은_비용을_빼지_않은_총상승_지표다():
+    df = make_df()
+    i = len(df) - 2
+    df.loc[df.index[i], "Close"] = 100.0
+    df.loc[df.index[i + 1], "Open"] = 100.1   # 총상승 +0.1% (비용 0.21%엔 못 미침)
+    df.loc[df.index[i + 1], "Close"] = 100.0
+    out = events.labels(df, i)
+    assert out["y_up"] == 1     # 총상승 기준으로는 상승
+    assert out["y_cls"] == 0    # 비용 차감 기준으로는 순손실
+
+
+# --- 추가 3: KRX 일일 가격제한(±30%, 틱 반올림 여유 포함 0.32) 위반 봉 배제 ---
+
+def test_is_breakout_가격제한_틱반올림_30_1퍼센트는_통과():
+    df = make_df()
+    i = len(df) - 2
+    df.loc[df.index[i], "Close"] = 130.1     # +30.1% — 상한가 틱 반올림으로 흔한 값
+    df.loc[df.index[i], "Volume"] = 1e9
+    assert events.is_breakout(df, i) is True
+
+
+def test_is_breakout_가격제한_35퍼센트는_거부():
+    df = make_df()
+    i = len(df) - 2
+    df.loc[df.index[i], "Close"] = 135.0     # +35% — ±30% 상한가로는 물리적으로 불가능
+    df.loc[df.index[i], "Volume"] = 1e9
+    assert events.is_breakout(df, i) is False
