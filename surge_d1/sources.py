@@ -19,18 +19,26 @@ OHLCV_COLS = ["Open", "High", "Low", "Close", "Volume"]
 
 
 def mark_halted(df: pd.DataFrame) -> pd.DataFrame:
-    """거래정지 봉을 표시하고 Open/Volume을 NaN으로 바꾼다.
+    """거래정지 봉을 표시하고 Open/High/Low/Volume을 NaN으로 바꾼다.
 
-    원본(FDR/네이버)은 거래정지일을 Open=0·Volume=0·Close=직전값으로 채운다.
-    예: 카카오(035720) 2021-04-15 액면분할 처리로 04-12~14 정지.
-    이 값을 그대로 두면 라벨이 −100%가 되고 거래량 평균이 왜곡되므로 NaN 처리한다.
+    원본(FDR/네이버)은 거래정지일을 Open=High=Low=0·Volume=0·Close=직전값으로
+    채운다. 예: 099520 2021-03-26, 카카오(035720) 2021-04-12~14(액면분할 처리).
+    Open·Volume만 보고 정지를 판정하고 High/Low를 0으로 남겨두면 라벨이
+    −100%가 되고 거래량 평균이 왜곡될 뿐 아니라, 후속 피처가 20봉 안팎의
+    창을 되돌아볼 때 min(Low)=0·max(High)=0 취급되어 RSV·ATR·변동성 압축
+    등이 오염된다. 그래서 Open/High/Low/Volume 중 하나라도 0 이하(또는 NaN)면
+    정지로 보고 네 값을 모두 NaN으로 바꾼다.
     Close는 직전값이 그대로 유효한 참조가이므로 건드리지 않는다.
     """
     out = df.copy()
-    halted = (out["Open"].fillna(0) <= 0) | (out["Volume"].fillna(0) <= 0)
+    halted = (
+        (out["Open"].fillna(0) <= 0)
+        | (out["High"].fillna(0) <= 0)
+        | (out["Low"].fillna(0) <= 0)
+        | (out["Volume"].fillna(0) <= 0)
+    )
     out["halted"] = halted.to_numpy()
-    out.loc[halted, "Open"] = np.nan
-    out.loc[halted, "Volume"] = np.nan
+    out.loc[halted, ["Open", "High", "Low", "Volume"]] = np.nan
     return out
 
 

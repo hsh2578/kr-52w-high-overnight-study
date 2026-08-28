@@ -43,17 +43,59 @@ def test_build_market_index_종목마다_거래일이_달라도_처리한다():
 
 
 def test_mark_halted_거래정지봉을_표시하고_NaN으로_바꾼다():
-    # 원본은 거래정지일을 Open=0, Volume=0, Close=직전값으로 채운다
+    # 원본은 거래정지일을 Open=High=Low=0, Volume=0, Close=직전값으로 채운다
+    # (예: 099520 2021-03-26)
     d = ["2021-04-09", "2021-04-12", "2021-04-13", "2021-04-15"]
-    df = _df(d, [111, 0, 0, 120], [112, 112, 112, 121],
-             [110, 112, 112, 119], [112, 112, 112, 120], [100, 0, 0, 500])
+    df = _df(d, [111, 0, 0, 120], [112, 0, 0, 121],
+             [110, 0, 0, 119], [112, 112, 112, 120], [100, 0, 0, 500])
     out = sources.mark_halted(df)
     assert list(out["halted"]) == [False, True, True, False]
     assert np.isnan(out["Open"].iloc[1])
+    assert np.isnan(out["High"].iloc[1])
+    assert np.isnan(out["Low"].iloc[1])
     assert np.isnan(out["Volume"].iloc[2])
     # 정상 봉은 그대로
     assert out["Open"].iloc[0] == 111
+    assert out["High"].iloc[0] == 112
+    assert out["Low"].iloc[0] == 110
     assert out["Close"].iloc[1] == 112       # 종가는 건드리지 않는다
+
+
+def test_mark_halted_전형적인_정지봉에서_High_Low도_NaN이_되고_Close는_유지된다():
+    # 099520 2021-03-26 패턴: Open=High=Low=0, Volume=0, Close=직전값 이월
+    d = ["2021-03-25", "2021-03-26", "2021-03-29"]
+    df = _df(d, [1300, 0, 1290], [1310, 0, 1295],
+             [1280, 0, 1280], [1284, 1284, 1284], [1000, 0, 800])
+    out = sources.mark_halted(df)
+    assert list(out["halted"]) == [False, True, False]
+    assert np.isnan(out["Open"].iloc[1])
+    assert np.isnan(out["High"].iloc[1])
+    assert np.isnan(out["Low"].iloc[1])
+    assert np.isnan(out["Volume"].iloc[1])
+    assert out["Close"].iloc[1] == 1284       # 종가는 직전값 그대로 유지
+
+
+def test_mark_halted_적용후_Low최솟값이_0이_아니다():
+    # 정지봉의 Low=0이 그대로 남으면 후속 피처(RSV_20 등)의 min(Low)가
+    # 0으로 붕괴한다 — 이를 방지하는 것이 이 수정의 핵심.
+    d = ["2021-03-25", "2021-03-26", "2021-03-29"]
+    df = _df(d, [1300, 0, 1290], [1310, 0, 1295],
+             [1280, 0, 1280], [1284, 1284, 1284], [1000, 0, 800])
+    out = sources.mark_halted(df)
+    assert out["Low"].min() > 0
+    assert out["High"].max() > 0
+
+
+def test_mark_halted_High만_0이어도_정지로_잡힌다():
+    # Open/Low/Volume은 정상인데 High만 0인 비정상 봉도 정지로 판정돼야 한다
+    d = ["2021-03-25", "2021-03-26", "2021-03-29"]
+    df = _df(d, [1300, 1290, 1290], [1310, 0, 1295],
+             [1280, 1280, 1280], [1284, 1284, 1284], [1000, 900, 800])
+    out = sources.mark_halted(df)
+    assert list(out["halted"]) == [False, True, False]
+    assert np.isnan(out["Open"].iloc[1])
+    assert np.isnan(out["Low"].iloc[1])
+    assert np.isnan(out["Volume"].iloc[1])
 
 
 def test_mark_halted_적용후_거래량평균이_정지봉을_건너뛴다():
