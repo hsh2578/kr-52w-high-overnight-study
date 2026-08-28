@@ -195,3 +195,32 @@ def test_exclude_key가_fit집합에_없으면_기존동작과_동일하다():
     baseline = idx.transform("정책·정부", "정부 정책 수혜 기대", k=1)
     with_missing_key = idx.transform("정책·정부", "정부 정책 수혜 기대", k=1, exclude_key=999999)
     assert with_missing_key == baseline
+
+
+# ---------------------------------------------------------------------------
+# 중복 인덱스 라벨 — exclude_key 자기 배제를 무력화하는 조용한 실패 방지
+#
+# _key_to_pos가 라벨→위치 단일 매핑이라, fit()에 넘긴 rows.index에 중복
+# 라벨이 있으면 같은 라벨의 두 번째 이후 행은 등록되지 않는다. 그 행을
+# exclude_key로 질의해도 자기 자신이 제외되지 않고 자기 라벨이 그대로
+# analog_mean_d1/type_prior로 새어 들어온다 — 에러 없이 조용히. fit()이
+# 이런 인덱스를 아예 거부하도록(시끄럽게 실패하도록) 한다.
+# ---------------------------------------------------------------------------
+
+def test_중복된_인덱스로_fit하면_에러가_나고_라벨을_알려준다():
+    rows = pd.DataFrame({
+        "ctype": ["정책·정부", "정책·정부", "실적·호재"],
+        "reason": ["첫번째 사유 문장", "두번째 사유 문장", "세번째 사유 문장"],
+        "d1": [10.0, 20.0, 30.0],
+    }, index=[5, 5, 6])
+    idx = features_f4.CatalystIndex()
+    with pytest.raises(ValueError, match="5"):
+        idx.fit(rows)
+
+
+def test_유일한_인덱스면_fit이_에러없이_기존과_동일하게_동작한다():
+    idx = features_f4.CatalystIndex()
+    idx.fit(self_incl_rows())  # index=[100, 101, 102, 103, 104], 모두 유일
+    out = idx.transform("정책·정부", "정부 정책 수혜 기대", k=1, exclude_key=100)
+    assert out["analog_mean_d1"] != pytest.approx(999.0)
+    assert out["type_prior"] == pytest.approx(1.0)

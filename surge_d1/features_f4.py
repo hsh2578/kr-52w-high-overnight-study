@@ -64,14 +64,37 @@ class CatalystIndex:
         """rows: 컬럼 ctype, reason, d1 (학습 구간만 넘길 것).
 
         rows.index를 그대로 "키"로 보존한다 — transform(exclude_key=...)가
-        이 키로 자기 자신의 행을 찾아 후보 풀에서 제외한다. 인덱스가
-        중복되면 첫 항목만 키로 등록된다(자기 배제 목적으로는 충분하다).
+        이 키로 자기 자신의 행을 찾아 후보 풀·유형 평균에서 제외한다.
+        **rows.index는 유일해야 한다.** 중복 라벨이 있으면 위치 매핑이
+        하나로 뭉개져 그 라벨을 공유하는 두 번째 이후 행은 자기 배제가
+        전혀 먹지 않는다 — 에러 없이 조용히, 자기 자신의 d1이
+        analog_mean_d1/type_prior로 새어 들어온다. 그래서 이 메서드는
+        인덱스가 중복되면 그 자리에서 ValueError를 던진다: 라벨을 조용히
+        받아들여 나중에 소리 없이 틀린 값을 내는 것보다, fit 시점에 시끄럽게
+        실패해 호출자가 유일한 인덱스로 다시 넘기게(예: reset_index 후
+        별도 id 컬럼을 인덱스로 쓰기) 하는 편이 안전하다.
+
+        **경고(Task 11이 가장 저지르기 쉬운 실수)**: 학습 폴드 자신의
+        행에 대해 피처를 만들면서 exclude_key를 빠뜨리면 예외도, 경고도
+        없이 그 행 자신의 d1이 analog_mean_d1/type_prior로 새어 들어온다.
+        증상이 전혀 없는 조용한 누수이므로, 학습·검정 양쪽 폴드 전체에
+        대해 항상 exclude_key=row_index를 넘기는 습관을 들여야 한다
+        (모듈 docstring의 "Task 11 호출 규약" 참조).
         """
         from sklearn.feature_extraction.text import TfidfVectorizer
 
         r = rows.dropna(subset=["d1"]).copy()
         r["reason"] = r["reason"].fillna("").astype(str)
         r = r[r["reason"].str.len() > 0]
+
+        if r.index.duplicated().any():
+            dup_labels = sorted(set(r.index[r.index.duplicated()].tolist()))
+            raise ValueError(
+                f"CatalystIndex.fit(): rows.index에 중복된 라벨이 있다: "
+                f"{dup_labels}. exclude_key로 행을 안전하게 자기 배제하려면 "
+                f"rows.index가 유일해야 한다 — 유일한 인덱스로 다시 넘겨라"
+                f"(예: rows.reset_index(drop=True) 후 별도 id 컬럼을 인덱스로 지정)."
+            )
 
         self._keys = r.index.to_numpy()
         self._ctypes = r["ctype"].to_numpy()
@@ -103,6 +126,12 @@ class CatalystIndex:
         만들 때) 자기 자신의 라벨이 새어 들어오는 것을 막기 위함이다.
         fit 집합에 없는 키를 넘기면(검정 폴드의 정상 경로) 아무 효과가
         없어 exclude_key를 안 넘긴 것과 결과가 완전히 같다.
+
+        **경고**: 학습 폴드 자신의 행에 대해 피처를 만들면서 exclude_key를
+        빠뜨리면(또는 None으로 두면) 예외도 경고도 없이 그 행 자신의 d1이
+        analog_mean_d1/analog_win_rate/type_prior로 새어 들어온다. 이것이
+        만들어내는 증상은 전혀 없다 — 조용한 타겟 인코딩 누수다. 학습·검정
+        양쪽 폴드 전체에 대해 항상 exclude_key=row_index를 넘겨라.
         """
         if not self._fitted:
             raise RuntimeError("CatalystIndex.fit()을 먼저 호출해야 한다")
