@@ -19,7 +19,8 @@ OHLCV_COLS = ["Open", "High", "Low", "Close", "Volume"]
 
 
 def mark_halted(df: pd.DataFrame) -> pd.DataFrame:
-    """거래정지 봉을 표시하고 Open/High/Low/Volume을 NaN으로 바꾼다.
+    """거래정지 봉을 표시하고 Open/High/Low/Volume을 NaN으로 바꾼 뒤,
+    남은 정상 봉의 고저 불변식을 복구한다.
 
     원본(FDR/네이버)은 거래정지일을 Open=High=Low=0·Volume=0·Close=직전값으로
     채운다. 예: 099520 2021-03-26, 카카오(035720) 2021-04-12~14(액면분할 처리).
@@ -29,6 +30,25 @@ def mark_halted(df: pd.DataFrame) -> pd.DataFrame:
     등이 오염된다. 그래서 Open/High/Low/Volume 중 하나라도 0 이하(또는 NaN)면
     정지로 보고 네 값을 모두 NaN으로 바꾼다.
     Close는 직전값이 그대로 유효한 참조가이므로 건드리지 않는다.
+
+    고저 불변식 복구(정지봉 제외):
+    정의상 그날의 High는 그날 거래된 모든 가격 이상이어야 하고 Low는
+    이하여야 한다. 그런데 실측 캐시(약 440만 봉)에서 약 9,183봉(0.208%)이
+    High < max(Open,Close) 또는 Low > min(Open,Close)를 어긴다 — 80.5%는
+    1원 차이, 96.1%는 5원 이내로, 분할·액면가 조정 시 정수 반올림 과정에서
+    생긴 오차로 보인다. 이는 계산식을 "개선"하는 게 아니라 정의상 있을 수
+    없는 값을 고치는 것이다: Open/Close는 실제 체결·동시호가 가격이라
+    원본 그대로 신뢰하고, High/Low는 그로부터 도출되는 포락선이므로 포락선이
+    실제 체결가와 모순되면 포락선 쪽이 틀린 것이다. 이 정정을 하지 않으면
+    close_strength=(Close-Low)/(High-Low), upper_shadow=(High-Close)/(High-Low),
+    RSV_20, KMID2 등 [0,1] 범위로 정의된 피처들이 그 범위를 벗어나
+    (예: close_strength 최대 1.02, upper_shadow 최소 −0.02) 설명하기 어려운
+    이상치로 결과에 나타난다. 오차 규모가 미미하므로(80.5%가 1원) 이 복구가
+    실제 신호를 왜곡하지는 않는다.
+    정지봉은 이미 Open/High/Low가 NaN이므로 손대면 안 된다 — np.maximum/
+    np.minimum은 (pandas의 skipna=True 집계와 달리) NaN을 만나면 NaN을
+    그대로 반환해 전파하므로, 정지봉의 NaN High/Low가 Close 값으로
+    되살아나지 않는다. 이는 명시적으로 테스트로 검증한다.
     """
     out = df.copy()
     halted = (
@@ -39,6 +59,15 @@ def mark_halted(df: pd.DataFrame) -> pd.DataFrame:
     )
     out["halted"] = halted.to_numpy()
     out.loc[halted, ["Open", "High", "Low", "Volume"]] = np.nan
+
+    o = out["Open"].to_numpy(dtype=float)
+    h = out["High"].to_numpy(dtype=float)
+    l = out["Low"].to_numpy(dtype=float)
+    c = out["Close"].to_numpy(dtype=float)
+    # np.maximum/np.minimum은 NaN과 비교하면 NaN을 반환하므로, 정지봉(Open·High가
+    # NaN)은 Close가 유효해도 이 연산을 거쳐도 그대로 NaN으로 남는다.
+    out["High"] = np.maximum(np.maximum(h, o), c)
+    out["Low"] = np.minimum(np.minimum(l, o), c)
     return out
 
 

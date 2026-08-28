@@ -98,6 +98,55 @@ def test_mark_halted_High만_0이어도_정지로_잡힌다():
     assert np.isnan(out["Volume"].iloc[1])
 
 
+def test_mark_halted_불변식이_이미_성립하는_정상봉은_그대로_둔다():
+    # High/Low가 이미 Open/Close를 포함하는 정상 봉은 값이 하나도 바뀌면 안 된다
+    d = ["2021-03-25"]
+    df = _df(d, [100], [105], [98], [102], [500])
+    out = sources.mark_halted(df)
+    assert out["halted"].iloc[0] == False
+    assert out["Open"].iloc[0] == 100
+    assert out["High"].iloc[0] == 105
+    assert out["Low"].iloc[0] == 98
+    assert out["Close"].iloc[0] == 102
+    assert out["Volume"].iloc[0] == 500
+
+
+def test_mark_halted_Close가_High보다_크면_High를_Close로_올린다():
+    # 분할·액면가 조정 반올림 오차로 Close가 High를 넘어서는 봉(약 0.2%) —
+    # High는 그날 거래된 모든 가격 이상이어야 한다는 정의를 어긴 것이므로 복구한다
+    d = ["2021-03-25"]
+    df = _df(d, [100], [105], [98], [108], [500])   # Close(108) > High(105)
+    out = sources.mark_halted(df)
+    assert out["halted"].iloc[0] == False
+    assert out["High"].iloc[0] == 108
+    assert out["Open"].iloc[0] == 100                # Open/Close는 원본 그대로 신뢰
+    assert out["Close"].iloc[0] == 108
+    assert out["Low"].iloc[0] == 98
+
+
+def test_mark_halted_Low가_Open보다_크면_Low를_Open으로_내린다():
+    d = ["2021-03-25"]
+    df = _df(d, [100], [110], [102], [105], [500])  # Low(102) > Open(100)
+    out = sources.mark_halted(df)
+    assert out["halted"].iloc[0] == False
+    assert out["Low"].iloc[0] == 100
+    assert out["Open"].iloc[0] == 100
+    assert out["Close"].iloc[0] == 105
+    assert out["High"].iloc[0] == 110
+
+
+def test_mark_halted_정지봉은_불변식_복구후에도_High_Low가_NaN으로_남는다():
+    # 회귀 테스트 핵심: np.maximum/np.minimum의 NaN 전파가 깨지면
+    # 정지봉의 NaN High/Low가 Close(1284)로 되살아난다 — 반드시 NaN이어야 한다
+    d = ["2021-03-26"]
+    df = _df(d, [0], [0], [0], [1284], [0])
+    out = sources.mark_halted(df)
+    assert out["halted"].iloc[0] == True
+    assert np.isnan(out["High"].iloc[0])
+    assert np.isnan(out["Low"].iloc[0])
+    assert out["Close"].iloc[0] == 1284
+
+
 def test_mark_halted_적용후_거래량평균이_정지봉을_건너뛴다():
     d = ["2021-04-09", "2021-04-12", "2021-04-15"]
     df = _df(d, [100, 0, 100], [101, 101, 101], [99, 101, 99],
