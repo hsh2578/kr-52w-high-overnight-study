@@ -59,13 +59,31 @@ def top_decile_return(y_true, y_pred, dates, q: float = 0.1) -> float:
     """일별로 예측 상위 q 비율을 뽑아 실제 수익률 평균을 낸다.
 
     예측값에 변동이 없는 날(전부 동률)은 상위 선정이 무의미하므로 건너뛴다.
+
+    최소 표본 가드: 이름이 3개 미만인 날은 제외한다(spearman_ic의
+    len(g) < 3과 동일 기준 — 절대 개수 3을 무비판적으로 베낀 것이 아니라
+    같은 통계적 근거로 다시 도출한 값이다). 근거: q=0.1과 반올림
+    (k = max(1, round(n*q)))의 조합상, n이 1~14 사이인 날은 전부 선정
+    개수 k가 1로 고정된다. n=1인 날은 후보가 하나뿐이라 예측이 무엇이든
+    무조건 그 종목이 뽑히는 자명한 경우이고, n=2인 날은 사실상 동전
+    던지기 수준의 이산적 비교(둘 중 하나)에 불과해 개별 표본의 노이즈가
+    극단적으로 크다. n>=3부터는 최소한 "상위 1/3 이내"라는 의미 있는
+    배제가 성립한다.
+
+    참고: `nunique < 2` 조건은 이름이 1개뿐인 날을 우연히 걸러내지만
+    (값이 하나면 정의상 nunique==1) 이름이 2개뿐인 날(서로 다른 예측값
+    2개 → nunique==2)은 걸러내지 못한다 — 그래서 표본 크기 자체를 보는
+    `len(g) < 3` 가드가 별도로 필요하다.
+
+    실측(data/dataset.parquet, 1,586개 이벤트일): n=1인 날 53개(3.3%),
+    n=2인 날 63개(4.0%), 합쳐서 116개(7.3%)가 이 가드로 제외된다.
     """
     df = pd.DataFrame({"y": np.asarray(y_true, dtype=float),
                        "p": np.asarray(y_pred, dtype=float),
                        "d": pd.to_datetime(pd.Series(dates).values)})
     picked = []
     for _, g in df.groupby("d"):
-        if len(g) < 1 or g["p"].nunique() < 2:
+        if len(g) < 3 or g["p"].nunique() < 2:
             continue
         k = max(1, int(round(len(g) * q)))
         picked.append(g.nlargest(k, "p")["y"])
