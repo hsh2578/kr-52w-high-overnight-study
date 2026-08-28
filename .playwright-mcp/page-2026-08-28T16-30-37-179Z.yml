@@ -1,5 +1,0 @@
-- generic [ref=f4e2]:
-  - button "이전 슬라이드" [disabled] [ref=f4e3]: ←
-  - generic [ref=f4e4]: 1 / 0
-  - button "다음 슬라이드" [ref=f4e5] [cursor=pointer]: →
-  - button "PDF로 인쇄" [ref=f4e6] [cursor=pointer]: PDF

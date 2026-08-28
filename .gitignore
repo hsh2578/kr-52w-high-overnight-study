@@ -30,3 +30,8 @@ desktop.ini
 
 # 로그
 logs/
+
+# 브라우저 검증 산출물 — 렌더링 확인용 임시 파일이지 결과물이 아니다
+.playwright-mcp/
+*.png
+!outputs/figures/*.png
