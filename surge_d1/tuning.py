@@ -40,7 +40,6 @@ from itertools import product
 
 import numpy as np
 import pandas as pd
-from sklearn.isotonic import IsotonicRegression
 from sklearn.metrics import roc_auc_score
 
 from surge_d1 import config, dataset, models, validate
@@ -224,13 +223,16 @@ def _fit_predict(train_df: pd.DataFrame, test_df: pd.DataFrame,
     prob_raw_tr = clf.predict_proba(Xtr)[:, 1]
     prob_raw_te = clf.predict_proba(Xte)[:, 1]
 
-    iso = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
-    iso.fit(prob_raw_tr, ytr, sample_weight=w)
-    prob_cal_tr = np.clip(iso.predict(prob_raw_tr), 0.0, 1.0)
-    prob_cal_te = np.clip(iso.predict(prob_raw_te), 0.0, 1.0)
-
-    train_out = {"pred_reg": pred_reg_tr, "prob_raw": prob_raw_tr, "prob_cal": prob_cal_tr}
-    test_out = {"pred_reg": pred_reg_te, "prob_raw": prob_raw_te, "prob_cal": prob_cal_te}
+    # 확률 보정은 하지 않는다. 이 모듈이 재는 지표(AUC·IC·상위10% 수익률)는
+    # 전부 **순위** 기반이라 단조변환인 isotonic에 영향받지 않는다. 예전에는
+    # 여기서 학습예측에 isotonic을 적합했는데, 그것은 models._oof_prob가
+    # 문서화한 과신 증폭 버그의 복제본이었다 — 쓰이지도 않는 값을 위해
+    # 알려진 버그를 두 벌 유지할 이유가 없다. prob_cal에는 원확률을 그대로
+    # 넣어 호출부 계약(키 3개)만 지킨다.
+    train_out = {"pred_reg": pred_reg_tr, "prob_raw": prob_raw_tr,
+                 "prob_cal": prob_raw_tr}
+    test_out = {"pred_reg": pred_reg_te, "prob_raw": prob_raw_te,
+                "prob_cal": prob_raw_te}
     return train_out, test_out
 
 

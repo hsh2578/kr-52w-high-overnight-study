@@ -54,9 +54,45 @@ def assert_train_before_test(train_df: pd.DataFrame, test_df: pd.DataFrame) -> N
         )
 
 
+def _oof_prob(train_df: pd.DataFrame, feats: list[str],
+              w: np.ndarray | None, n_splits: int = 3) -> tuple:
+    """학습 구간 **안에서** 시간순 분할로 out-of-fold 확률을 만든다.
+
+    확률 보정을 학습 예측(`clf.predict_proba(Xtr)`)에 맞추면 안 되는 이유:
+    분류기는 학습 구간을 외워 AUC 0.77~0.82를 내지만 검정에서는 0.60이다.
+    그 위에 isotonic을 적합하면 "raw 0.9 = 진짜 0.95"를 배우고, 검정의
+    raw 0.9(실제로는 0.6쯤)에 그대로 적용해 **과신을 교정하는 대신 증폭**한다.
+    실측으로 검정 Brier가 0.2848까지 올라 상수예측(0.2480)보다 나빴다.
+
+    그래서 보정은 모델이 보지 못한 예측 위에서만 맞춘다. 분할은
+    tuning.inner_time_splits와 같은 확장(expanding) 시간순 방식이라
+    내부 검증에도 미래 정보가 섞이지 않는다.
+
+    반환: (oof_prob, mask) — mask는 OOF 예측이 존재하는 행. 가장 이른
+    구간은 어떤 분할에서도 검증이 되지 않아 비며, 그 행들은 보정 적합에서
+    빠진다(예측 자체에는 영향 없음).
+    """
+    from lightgbm import LGBMClassifier
+
+    from surge_d1.tuning import inner_time_splits
+
+    X = train_df[feats].to_numpy(dtype=float)
+    y = train_df["y_cls"].to_numpy(dtype=int)
+    oof = np.full(len(train_df), np.nan)
+    for tr_idx, va_idx in inner_time_splits(train_df["date"], n_splits):
+        if len(np.unique(y[tr_idx])) < 2:      # 한쪽 클래스뿐이면 적합 불가
+            continue
+        c = LGBMClassifier(**CLF_PARAMS)
+        c.fit(X[tr_idx], y[tr_idx],
+              sample_weight=None if w is None else w[tr_idx])
+        oof[va_idx] = c.predict_proba(X[va_idx])[:, 1]
+    return oof, ~np.isnan(oof)
+
+
 def _fit_predict_train_test(train_df: pd.DataFrame, test_df: pd.DataFrame,
                             feats: list[str], use_weight: bool = True,
-                            label_reg: str = "y_raw"
+                            label_reg: str = "y_raw",
+                            calibrate: str = "oof"
                             ) -> tuple[dict, dict]:
     """실제 모델 적합은 한 번만 하고, 학습·검정 양쪽에 대한 예측을 함께 낸다.
 
@@ -64,6 +100,11 @@ def _fit_predict_train_test(train_df: pd.DataFrame, test_df: pd.DataFrame,
     결과만 노출한다 — 학습 쪽 예측은 run_ablation의 과적합 진단
     (학습-검정 성능 격차)에만 쓴다. 재적합하지 않고 같은 reg/clf/iso로
     Xtr·Xte 양쪽을 predict하므로 추가 학습 비용은 없다.
+
+    `calibrate`: "oof"(기본) 는 학습 구간 내부 시간순 분할의 out-of-fold
+    예측으로 isotonic을 적합한다. "in_fold" 는 학습 예측에 적합하는 옛
+    방식으로, 검정에서 과신을 증폭시킨다 — 회귀 테스트 전용이며 결과
+    산출에 쓰지 않는다. `_oof_prob`의 독스트링에 실측 근거가 있다.
     """
     n_train, n_test = len(train_df), len(test_df)
     if not feats:
@@ -98,12 +139,26 @@ def _fit_predict_train_test(train_df: pd.DataFrame, test_df: pd.DataFrame,
     prob_raw_tr = clf.predict_proba(Xtr)[:, 1]
     prob_raw_te = clf.predict_proba(Xte)[:, 1]
 
-    # 확률 보정: 학습 구간 내부 예측으로 isotonic을 적합 (스펙 §7.4)
-    # 리뷰 Minor 3: LightGBM 두 모델은 sample_weight=w로 학습하는데
-    # isotonic만 가중치 없이 적합하면 보정이 모델과 어긋난다 — 동일한
-    # w를 넘겨 일관시킨다.
+    # 확률 보정 (스펙 §7.4). LightGBM 두 모델은 sample_weight=w로 학습하므로
+    # isotonic에도 같은 w를 넘겨 보정이 모델과 어긋나지 않게 한다(리뷰 Minor 3).
     iso = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
-    iso.fit(prob_raw_tr, ytr, sample_weight=w)
+    if calibrate == "oof":
+        # 모델이 보지 못한 예측 위에서 보정한다 — 이유는 _oof_prob 참조.
+        oof, m = _oof_prob(train_df, feats, w)
+        if m.sum() >= 50 and len(np.unique(ytr[m])) == 2:
+            iso.fit(oof[m], ytr[m], sample_weight=None if w is None else w[m])
+        else:
+            # OOF 표본이 너무 적으면 보정 자체가 잡음이다. 보정을 포기하고
+            # 원확률을 그대로 쓴다(과신을 증폭하는 것보다 낫다).
+            train_out = {"pred_reg": pred_reg_tr, "prob_raw": prob_raw_tr,
+                         "prob_cal": prob_raw_tr}
+            test_out = {"pred_reg": pred_reg_te, "prob_raw": prob_raw_te,
+                        "prob_cal": prob_raw_te}
+            return train_out, test_out
+    elif calibrate == "in_fold":
+        iso.fit(prob_raw_tr, ytr, sample_weight=w)
+    else:
+        raise ValueError(f"calibrate는 'oof' 또는 'in_fold': {calibrate!r}")
     prob_cal_tr = np.clip(iso.predict(prob_raw_tr), 0.0, 1.0)
     prob_cal_te = np.clip(iso.predict(prob_raw_te), 0.0, 1.0)
 
@@ -145,7 +200,11 @@ def evaluate(test_df: pd.DataFrame, out: dict,
     if len(np.unique(ycls)) < 2:
         auc = float("nan")
     else:
-        auc = float(roc_auc_score(ycls, out["prob_cal"]))
+        # AUC는 **순위** 지표이므로 연속값 prob_raw로 잰다. 보정된 prob_cal은
+        # isotonic 계단 함수라 동점이 대량 생기고, roc_auc_score는 동점을
+        # 0.5로 세어 AUC를 인위적으로 깎는다(실측 폴드당 최대 -0.005).
+        # 반대로 Brier는 **확률값** 지표이므로 보정된 prob_cal로 재야 한다.
+        auc = float(roc_auc_score(ycls, out["prob_raw"]))
     brier = float(brier_score_loss(ycls, out["prob_cal"]))
 
     pred_reg = np.asarray(out["pred_reg"], dtype=float)

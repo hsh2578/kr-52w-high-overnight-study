@@ -66,13 +66,26 @@ def simulate_random(df: pd.DataFrame, top_n: int, n_iter: int = 20,
     return acc
 
 
+def _active(daily: pd.DataFrame) -> pd.Series:
+    """실제로 종목을 보유한 날 마스크. n_picked가 없으면 전부 보유로 본다."""
+    if "n_picked" not in daily.columns:
+        return pd.Series(True, index=daily.index)
+    return daily["n_picked"].fillna(0).astype(float) > 0
+
+
+def _active_win_rate(daily: pd.DataFrame, r: pd.Series) -> float:
+    m = _active(daily).reindex(r.index).fillna(False).to_numpy(dtype=bool)
+    return float((r[m] > 0).mean()) if m.sum() else float("nan")
+
+
 def _empty_stats() -> dict:
     keys = ("cum_return cum_return_additive cagr vol sharpe sortino calmar mdd "
-            "mdd_days win_rate profit_factor expectancy mean_trade_ret sqn "
-            "best_day worst_day alpha beta").split()
+            "mdd_days win_rate win_rate_active profit_factor expectancy "
+            "mean_trade_ret sqn best_day worst_day alpha beta").split()
     out = {k: float("nan") for k in keys}
     out.update({"cum_return": 0.0, "cum_return_additive": 0.0, "cagr": 0.0,
-                "vol": 0.0, "mdd": 0.0, "mdd_days": 0, "n_days": 0, "n_trades": 0})
+                "vol": 0.0, "mdd": 0.0, "mdd_days": 0, "n_days": 0,
+                "n_trades": 0, "n_active_days": 0})
     return out
 
 
@@ -187,6 +200,14 @@ def performance_stats(daily: pd.DataFrame,
         "sharpe": sharpe, "sortino": sortino, "calmar": calmar,
         "mdd": mdd, "mdd_days": _max_drawdown_days(equity),
         "win_rate": float((r > 0).mean()),
+        # 임계값 전략은 조건 미달일에 현금(수익률 0)으로 남는데, 위 win_rate는
+        # 그 현금일을 분모에 넣어 '패배'처럼 센다. 포트폴리오 지표로는 맞지만
+        # 매일 만근하는 룰 전략과 나란히 놓으면 오해를 부른다 — 실측으로
+        # model_prob50은 880일 중 269일이 현금이라 승률이 크게 희석됐다.
+        # 그래서 보유일 기준 승률을 함께 낸다(둘 다 표기하고, 어느 쪽도
+        # 대체하지 않는다).
+        "n_active_days": int(_active(daily).sum()),
+        "win_rate_active": _active_win_rate(daily, r),
         "profit_factor": profit_factor,
         "expectancy": float(r.mean()), "mean_trade_ret": mean_trade_ret,
         "sqn": sqn,
@@ -223,13 +244,19 @@ def out_of_sample_predictions(df: pd.DataFrame) -> pd.DataFrame:
             te = df[te_mask].reset_index(drop=True)
             out = models.fit_predict(tr, te, feats)
             te = te.copy()
-            te["score"] = out["prob_cal"]
+            # 순위(score)는 **보정 전** 확률로 매긴다. isotonic은 단조라
+            # 순위를 보존하지만 계단 함수라 값을 뭉갠다 — 실측으로 4,277행이
+            # 고유값 34개로 붕괴했다. 그 상태로 nlargest(5)를 하면 동점
+            # 무리 안에서 사실상 무작위 추출이 된다. 절대 확률 판단
+            # (임계값·사용자 표시)에만 보정값 prob_cal을 쓴다.
+            te["score"] = out["prob_raw"]
+            te["prob_cal"] = out["prob_cal"]
             te["pred_ret"] = out["pred_reg"]
 
             # 분위수 임계값은 **학습 구간 예측**으로 정한다. 검정 구간
             # 예측으로 정하면 결과를 보고 고르는 셈이라 체리피킹이다.
             tr_out = models.fit_predict(tr, tr, feats)
-            thr = float(np.quantile(tr_out["prob_cal"], 0.80))
+            thr = float(np.quantile(tr_out["prob_raw"], 0.80))
             te["pick_q80"] = (te["score"] >= thr).astype(int)
 
             parts.append(te)
@@ -237,7 +264,7 @@ def out_of_sample_predictions(df: pd.DataFrame) -> pd.DataFrame:
         models.REG_PARAMS, models.CLF_PARAMS = orig_reg, orig_clf
 
     if not parts:
-        return df.head(0).assign(score=[], pred_ret=[], pick_q80=[])
+        return df.head(0).assign(score=[], prob_cal=[], pred_ret=[], pick_q80=[])
     return pd.concat(parts, ignore_index=True)
 
 
@@ -445,7 +472,7 @@ CAPACITY_SPECS = {
     "rule_top5_close": dict(mode="topn", score_col="close_strength", top_n=5),
     "rule_top5_breakout": dict(mode="topn", score_col="breakout_pct", top_n=5),
     "random_5": dict(mode="random", top_n=5),
-    "model_prob50": dict(mode="threshold", score_col="score", threshold=0.50),
+    "model_prob50": dict(mode="threshold", score_col="prob_cal", threshold=0.50),
     "model_top5": dict(mode="topn", score_col="score", top_n=5),
 }
 
@@ -569,7 +596,7 @@ def run_backtest(df: pd.DataFrame
         "rule_top5_close": simulate(oos, "close_strength", 5),   # 단일 지표 (최강 대조군)
         "rule_top5_breakout": simulate(oos, "breakout_pct", 5),  # ML 없는 규칙 선별
         "random_5": simulate_random(oos, 5),                # 우연
-        "model_prob50": simulate_threshold(oos, "score", 0.50),  # ML 임계값
+        "model_prob50": simulate_threshold(oos, "prob_cal", 0.50),  # ML 임계값
         "model_top5": simulate(oos, "score", 5),            # ML 상위N (종목수 맞춤)
     }
     # 부록 — 계산은 하되 메인 그림에는 넣지 않는다
@@ -577,7 +604,7 @@ def run_backtest(df: pd.DataFrame
         # 벤치마크가 아니라 진단용 참고치: 시장 전체에 model_*/rule_* 전략과
         # 같은 매매방식(종가매수→익일시가매도, 비용 매일)을 적용했다면.
         "market_gap_daily": market_gap_diagnostic(df, window=win),
-        "model_prob55": simulate_threshold(oos, "score", 0.55),
+        "model_prob55": simulate_threshold(oos, "prob_cal", 0.55),
         "model_ret_pos": simulate_threshold(oos, "pred_ret", 0.0),
         "model_top10": simulate(oos, "score", 10),
         "rule_top5_value": simulate(oos, "liquidity", 5),

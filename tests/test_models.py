@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import inspect
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -187,3 +189,110 @@ def test_bootstrap_paired_auc_delta가_필요한_키를_모두_낸다():
         assert k in out
     assert out["ci_lo"] <= out["delta"] <= out["ci_hi"]
     assert out["delta"] > 0  # b가 뚜렷이 더 나으므로 양의 델타여야 한다
+
+
+# --- 확률 보정이 검정 구간에서도 작동하는가 (OOF isotonic) ---------------
+
+def _calib_toy(n_days=40, per_day=25, seed=7):
+    """신호가 약한(현실적인) 이진 문제. 분류기가 학습을 외우도록 표본을 작게."""
+    rng = np.random.default_rng(seed)
+    rows = []
+    for k in range(n_days):
+        date = pd.Timestamp("2024-01-01") + pd.Timedelta(days=k)
+        for _ in range(per_day):
+            f = rng.normal(size=6)
+            # 진짜 신호는 f[0] 하나뿐이고 나머지 5개는 순수 잡음이다 —
+            # 이 잡음을 외우는 만큼 학습-검정 격차가 벌어진다.
+            p = 1.0 / (1.0 + np.exp(-0.6 * f[0]))
+            rows.append({"date": date, **{f"f{j}": f[j] for j in range(6)},
+                         "y_cls": int(rng.random() < p),
+                         "y_raw": float(rng.normal() * 0.02)})
+    df = pd.DataFrame(rows)
+    df["weight"] = 1.0 / per_day
+    return df
+
+
+def test_보정이_학습예측에_적합되면_검정에서_과신한다():
+    """회귀 방지용 기준선: in-fold 적합은 실제로 망가진다는 사실을 고정한다."""
+    df = _calib_toy()
+    feats = [f"f{j}" for j in range(6)]
+    cut = pd.Timestamp("2024-01-31")
+    tr, te = df[df.date < cut], df[df.date >= cut]
+
+    _, out = models._fit_predict_train_test(tr, te, feats, True, "y_raw",
+                                            calibrate="in_fold")
+    p = np.asarray(out["prob_cal"])
+    hi = p > 0.8
+    assert hi.sum() > 0, "고확률 구간이 없으면 이 테스트가 무의미하다"
+    실제 = te["y_cls"].to_numpy()[hi].mean()
+    assert p[hi].mean() - 실제 > 0.10, (
+        f"in-fold 보정인데 과신이 없다: 예측 {p[hi].mean():.3f} vs 실제 {실제:.3f}")
+
+
+def test_OOF보정이_상수예측보다_좋은_Brier를_낸다():
+    """확률로 쓰려면 최소한 '항상 기저율' 보다는 나아야 한다."""
+    from sklearn.metrics import brier_score_loss
+
+    df = _calib_toy()
+    feats = [f"f{j}" for j in range(6)]
+    cut = pd.Timestamp("2024-01-31")
+    tr, te = df[df.date < cut], df[df.date >= cut]
+    y = te["y_cls"].to_numpy()
+    base = brier_score_loss(y, np.full(len(y), tr["y_cls"].mean()))
+
+    _, oof = models._fit_predict_train_test(tr, te, feats, True, "y_raw",
+                                            calibrate="oof")
+    _, inf = models._fit_predict_train_test(tr, te, feats, True, "y_raw",
+                                            calibrate="in_fold")
+    b_oof = brier_score_loss(y, np.asarray(oof["prob_cal"]))
+    b_inf = brier_score_loss(y, np.asarray(inf["prob_cal"]))
+
+    assert b_oof < b_inf, f"OOF({b_oof:.4f})가 in-fold({b_inf:.4f})보다 나빠졌다"
+    assert b_oof <= base, f"OOF Brier {b_oof:.4f} > 상수예측 {base:.4f}"
+
+
+def test_보정은_순위를_역전시키지_않는다():
+    """isotonic은 단조 — 순서를 뒤집지는 않는다.
+
+    다만 계단 함수라 **동점을 대량으로 만든다.** 실데이터에서 4,277행이
+    고유값 34개로 뭉개졌다. 그래서 backtest는 순위를 prob_raw로 매기고
+    prob_cal은 절대 확률 판단에만 쓴다 — 아래 두 번째 단언이 그 이유다.
+    """
+    df = _calib_toy()
+    feats = [f"f{j}" for j in range(6)]
+    cut = pd.Timestamp("2024-01-31")
+    tr, te = df[df.date < cut], df[df.date >= cut]
+    _, out = models._fit_predict_train_test(tr, te, feats, True, "y_raw",
+                                            calibrate="oof")
+    raw = np.asarray(out["prob_raw"])
+    cal = np.asarray(out["prob_cal"])
+
+    o = np.argsort(raw, kind="stable")
+    assert np.all(np.diff(cal[o]) >= -1e-12), "보정이 순서를 역전시켰다"
+    assert len(np.unique(cal)) < len(np.unique(raw)), (
+        "동점이 안 생겼다면 이 테스트의 전제를 다시 확인해야 한다")
+
+
+def test_백테스트는_순위를_보정전_확률로_매긴다():
+    """동점 붕괴 때문에 순위용 컬럼은 연속값이어야 한다."""
+    from surge_d1 import backtest
+
+    src = inspect.getsource(backtest.out_of_sample_predictions)
+    assert 'te["score"] = out["prob_raw"]' in src
+    assert 'te["prob_cal"] = out["prob_cal"]' in src
+
+
+def test_OOF보정은_검정데이터를_보지_않는다():
+    """학습 프레임 밖을 오염시켜도 보정 결과가 바뀌면 누수다."""
+    df = _calib_toy()
+    feats = [f"f{j}" for j in range(6)]
+    cut = pd.Timestamp("2024-01-31")
+    tr, te = df[df.date < cut], df[df.date >= cut]
+
+    _, a = models._fit_predict_train_test(tr, te, feats, True, "y_raw",
+                                          calibrate="oof")
+    te_p = te.copy()
+    te_p["y_cls"] = 1 - te_p["y_cls"]          # 검정 정답을 뒤집는다
+    _, b = models._fit_predict_train_test(tr, te_p, feats, True, "y_raw",
+                                          calibrate="oof")
+    np.testing.assert_allclose(a["prob_cal"], b["prob_cal"])
