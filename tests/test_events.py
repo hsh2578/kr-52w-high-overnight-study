@@ -101,18 +101,57 @@ def _write_master(tmp_path):
     return d
 
 
-def test_load_excluded_codes_우선주만_제외집합에_넣는다(monkeypatch, tmp_path):
+def _isolated_root(tmp_path):
+    """PROJECT_ROOT를 이 경로로 바꾸면 실제 data/universe.json이 보이지 않는다."""
+    root = tmp_path / "root"
+    root.mkdir()
+    return root
+
+
+def _write_universe(root, excluded, common=None):
+    """data/universe.json 픽스처. root는 PROJECT_ROOT로 monkeypatch할 경로."""
+    import json
+    d = root / "data"
+    d.mkdir(parents=True, exist_ok=True)
+    payload = {"as_of": "20260827", "common": common or [], "excluded": list(excluded),
+               "counts": {}}
+    with open(d / "universe.json", "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False)
+    return root
+
+
+def test_load_excluded_codes_universe_json이_있으면_그_excluded를_쓴다(monkeypatch, tmp_path):
+    root = _write_universe(_isolated_root(tmp_path), excluded=["000815", "0000D0"],
+                            common=["005930", "000810"])
+    monkeypatch.setattr(events.config, "PROJECT_ROOT", root)
+    out = events.load_excluded_codes()
+    assert out == {"000815", "0000D0"}
+
+
+def test_load_excluded_codes_universe_json_없으면_마스터로_폴백한다(monkeypatch, tmp_path):
+    monkeypatch.setattr(events.config, "PROJECT_ROOT", _isolated_root(tmp_path))
     monkeypatch.setattr(events.config, "HOLLYKR_CACHE", _write_master(tmp_path))
     out = events.load_excluded_codes()
     # is_etf 를 읽었다면 삼성전자·삼성화재도 제외돼 4건이 됐을 것이다
     assert out == {"000815", "000105"}
 
 
-def test_load_excluded_codes_마스터가_없으면_빈집합(monkeypatch, tmp_path):
+def test_load_excluded_codes_둘다_없으면_빈집합_예외없음(monkeypatch, tmp_path):
+    monkeypatch.setattr(events.config, "PROJECT_ROOT", _isolated_root(tmp_path))
     empty = tmp_path / "nomaster"
     empty.mkdir()
     monkeypatch.setattr(events.config, "HOLLYKR_CACHE", empty)
     assert events.load_excluded_codes() == set()
+
+
+def test_load_excluded_codes_어느_목록에도_없는_코드는_제외되지_않는다(monkeypatch, tmp_path):
+    """생존편향 가드: 상장폐지 등으로 마스터/유니버스 어느 쪽에도 없는 코드는
+    "제외 목록에 있어야만 빠진다" 규칙에 따라 살아남아야 한다."""
+    root = _write_universe(_isolated_root(tmp_path), excluded=["000815"],
+                            common=["005930"])
+    monkeypatch.setattr(events.config, "PROJECT_ROOT", root)
+    out = events.load_excluded_codes()
+    assert "999999" not in out          # 상장폐지 등 미상 코드는 제외집합에 없어야 한다
 
 
 def test_collect_events_제외집합에_있으면_빠지고_모르는코드는_남는다():
@@ -127,6 +166,18 @@ def test_collect_events_제외집합에_있으면_빠지고_모르는코드는_�
     assert len(events.collect_events({"999999": df}, exclude={"000815"})) == 1
     # exclude=None 이면 필터를 걸지 않는다
     assert len(events.collect_events({"000815": df}, exclude=None)) == 1
+
+
+def test_collect_events_universe_json_제외코드는_이벤트에서_빠진다(monkeypatch, tmp_path):
+    df = make_df()
+    i = len(df) - 2
+    df.loc[df.index[i], "Close"] = 128.0
+    df.loc[df.index[i], "Volume"] = 1e9
+
+    root = _write_universe(_isolated_root(tmp_path), excluded=["069500"])  # ETF 예시
+    monkeypatch.setattr(events.config, "PROJECT_ROOT", root)
+    ex = events.load_excluded_codes()
+    assert len(events.collect_events({"069500": df}, exclude=ex)) == 0
 
 
 def test_add_market_adjusted_그날_중앙값을_뺀다():

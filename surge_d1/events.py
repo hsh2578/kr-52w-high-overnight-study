@@ -6,6 +6,7 @@ pickle 사용 주의: 읽는 krx_master_*.pkl 은 HollyKR 프로젝트가 자기
 """
 from __future__ import annotations
 
+import json
 import pickle
 
 import numpy as np
@@ -95,13 +96,29 @@ def labels(df: pd.DataFrame, i: int, cost: float = config.COST) -> dict:
 
 
 def load_excluded_codes() -> set[str]:
-    """제외할 코드(우선주 등 비보통주) 집합.
+    """제외할 코드(개별 보통주가 아닌 것) 집합.
 
-    HollyKR 마스터의 `is_common` 만 쓴다. `is_etf` 는 신뢰할 수 없다 —
-    삼성전자(005930)가 True 로 잘못 표시돼 있음을 실측 확인했다.
-    마스터에 없는 코드(신규상장·상장폐지)는 제외하지 않는다: 상장폐지 종목을 남기는 것이
-    생존편향을 줄인다.
+    1순위: `data/universe.json` (KRX 공식 API 기반). ETF·ETN·ELW·우선주·리츠·
+    외국주권·DR·인프라펀드까지 포괄한다. HollyKR 마스터의 `is_etf` 플래그는
+    신뢰할 수 없다 — 삼성전자(005930)가 True 로 잘못 표시돼 있음을 실측
+    확인했다. universe.json이 없으면(또는 읽기 실패하면) HollyKR 마스터의
+    `is_common` 로 폴백하고, 그마저 없으면 빈 집합을 돌려준다 — 파일이 없다는
+    이유만으로 예외를 던지지 않는다.
+
+    어느 목록에도 없는 코드(신규상장·상장폐지 등)는 제외하지 않는다:
+    "제외 목록에 명시된 것만 뺀다"는 규칙이 상장폐지 종목을 남겨 생존편향을
+    줄인다. (반대로 "보통주 목록에 있어야만 포함"으로 뒤집으면 안 된다 —
+    collect_events의 exclude 시맨틱과 어긋난다.)
     """
+    universe_path = config.PROJECT_ROOT / "data" / "universe.json"
+    if universe_path.exists():
+        try:
+            with open(universe_path, encoding="utf-8") as f:
+                data = json.load(f)
+            return {str(c) for c in data.get("excluded", [])}
+        except Exception:
+            pass  # 손상된 파일이면 아래 마스터 폴백으로 넘어간다
+
     masters = sorted(config.HOLLYKR_CACHE.glob("krx_master_*.pkl"))
     if not masters:
         return set()
