@@ -1,0 +1,24 @@
+# 52주 신고가 돌파 D+1 예측 연구 — 의존성
+#
+# 검증 환경: Python 3.13 / Windows 11. 아래는 실제로 결과를 산출한 버전이다.
+# 학회 발표용 재현성을 위해 정확한 버전을 고정해 둔다.
+
+# --- 데이터 처리 ---
+pandas==2.3.3
+numpy==2.4.6
+pyarrow==24.0.0          # dataset.parquet 입출력
+
+# --- 모델·검증 ---
+lightgbm==4.6.0          # 회귀/분류 (M0~M5)
+scikit-learn==1.8.0      # isotonic 확률보정, TF-IDF 유사사례(F4), KFold 누수 비교
+scipy==1.17.1            # Spearman IC, 통계검정
+
+# --- 그림 ---
+matplotlib==3.10.9
+
+# --- 데이터 수집 (scripts/ 전용, 분석 파이프라인에는 불필요) ---
+requests==2.33.1         # KRX Open API, 키움 REST API, DART
+finance-datareader==0.9.101   # OHLCV 증분 갱신, 미국 지수
+
+# --- 테스트 ---
+pytest==9.1.0

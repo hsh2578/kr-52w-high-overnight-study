@@ -184,16 +184,40 @@ KSFT  = (2*close-high-low)/open        KSFT2 = KSFT 분모를 (high-low)로
 생성한다. 전체 기간으로 만든 `CATALYST_TYPE_PRIOR` 상수를 그대로 쓰면 미래정보 누수이므로
 상수는 참고용으로만 두고 폴드별로 재계산한다.
 
-**합계: F1(14) + F2(10) + F3(20) + F4(5) = 49개**
+**합계: F1(14) + F2(10) + F3(20) + F5(6) + F4(5) = 55개**
 
 ## 6. 라벨
 
 ```
-y_raw  = (Open[i+1] - Close[i]) / Close[i] - 0.0021     # 주 라벨: 익일 시가청산 순수익률
-y_mkt  = y_raw - (그날 전체 이벤트의 y_raw 중앙값)        # 시장조정 라벨
-y_cls  = 1 if y_raw > 0 else 0                          # 분류 라벨
-y_hold = (Close[i+1] - Close[i]) / Close[i] - 0.0021     # 보조: 익일 종가청산
+y_raw    = (Open[i+1] - Close[i]) / Close[i] - 0.0021    # 주 라벨: 익일 시가청산 순수익률
+y_mkt    = y_raw - (그날 전체 이벤트의 y_raw 중앙값)      # 시장조정 라벨
+y_cls    = 1 if y_raw > 0 else 0                         # 분류 타깃 = 익일 순이익 확률
+y_hold   = (Close[i+1] - Close[i]) / Close[i] - 0.0021   # 보조: 익일 종가청산
+y_hold20 = (Close[i+20] - Close[i]) / Close[i] - 0.0021  # 보조: 20일 보유 (없으면 NaN)
+y_up     = 1 if Open[i+1] > Close[i] else 0              # 비용 전 순수 상승 (집계 전용)
 ```
+
+**확률의 이름을 정확히 붙인다.** 학습 타깃 `y_cls`는 비용 0.21%를 넘긴 확률이므로
+"익일 상승 확률"이 아니라 **"익일 순이익 확률"**이다. 순수 상승 확률은 `y_up`의 단순
+집계로 리포트에 병기한다 — 둘의 차이("상승은 46%인데 비용을 넘기는 건 43.5%")가
+이 전략의 본질을 드러내므로 발표에서 함께 제시한다.
+
+**지평 선택의 근거 (28,317건 실측):**
+
+| 지평 | 평균 | 중앙 | 승률 | 표준편차 | t값 | 실현 가능 |
+|---|---|---|---|---|---|---|
+| **익일 시가청산** | **+0.402%** | −0.210% | 43.2% | **3.86%** | **17.55** | O |
+| 익일 종가청산 | −0.007% | −0.210% | 42.4% | 7.16% | **−0.17** | O |
+| 20일 보유 | +1.176% | −2.300% | 43.8% | 28.03% | 7.06 | O |
+| 20일 내 최고 | +16.147% | +7.958% | 80.1% | 29.04% | 93.56 | **X** |
+| 20일 내 최저 | −11.903% | −10.066% | 11.1% | 12.27% | −163.25 | X |
+
+익일 종가까지 보유하면 수익이 사라지고(t=−0.17) 변동성만 2배가 된다 — 오버나이트
+이상현상 문헌(§2.1)이 예측한 그대로다. 20일 보유는 신호가 익일의 절반이고 변동성이
+7배다. 그리고 **기존 웹사이트 프로젝트의 타깃 `max_gain_20d`(20일 내 최고, +16.1%,
+승률 80%)는 어느 날이 고점인지 사후에만 알 수 있어 실현 불가능하다** — 완벽한 모델도
+그 수익을 realize할 수 없다. 이것이 그 프로젝트 R²=0.03의 유력한 원인이며, 이 진단
+자체가 본 연구의 기여 중 하나다.
 
 **`y_mkt` 를 넣는 이유**: 익일 시가 수익률은 시장 전체의 갭에 크게 좌우된다. 횡단면
 정규화(cross-sectional normalization)는 qlib을 포함한 표준 관행이며, 이를 병행해야
@@ -208,12 +232,15 @@ y_hold = (Close[i+1] - Close[i]) / Close[i] - 0.0021     # 보조: 익일 종가
 |---|---|---|---|
 | **M0** | 없음 (학습 구간 평균) | 0 | 귀무가설 |
 | **M1** | F1 | 14 | *기존 프로젝트를 D+1로 그냥 옮기면?* |
-| **M2** | F1+F2 | 24 | *지평에 맞게 피처를 재설계하면?* |
-| **M3** | F1+F2+F3 | 44 | *검증된 범용 팩터(qlib)를 더하면?* |
-| **M4** | F1+F2+F3+F4 | 49 | *재료를 더하면?* |
+| **M2** | +F2 | 24 | *지평에 맞게 피처를 재설계하면?* |
+| **M3** | +F3 | 44 | *검증된 범용 팩터(qlib)를 더하면?* |
+| **M4** | +F5 | 50 | ***한국 시장 수급을 더하면?*** |
+| **M5** | +F4 | 55 | *재료를 더하면?* (재료 표본 한정) |
 
-M4는 재료가 붙은 ~1,781건에서만 학습 가능하므로, **동일 표본에서 M3를 재학습한 `M3prime`**
-와 비교한다. M3 vs M4 직접 비교는 표본이 달라 하지 않는다.
+M5는 재료가 붙은 표본에서만 학습 가능하므로, **동일 표본에서 M4를 재학습한 `M4prime`**
+과 비교한다. M4 vs M5 직접 비교는 표본이 달라 하지 않는다.
+
+M0~M4는 전체 표본(약 28,000건) 4폴드, M4prime/M5는 재료 표본 단일 폴드다.
 
 알고리즘은 LightGBM 고정(회귀 `LGBMRegressor`, 분류 `LGBMClassifier`). 모델 탐색은 이
 연구의 주제가 아니며, 피처군의 기여를 측정하는 것이 목적이다.
@@ -255,7 +282,46 @@ purge 필요성은 작지만, 같은 시장 충격을 공유하는 인접 표본
 
 - 분류: AUC, **Brier score**, precision@top-10%
 - 회귀: MAE, **Spearman IC**(일별 IC의 평균과 t값 = IR)
-- **경제적 지표(메인)**: 예측 상위 10% 픽의 평균 순수익률 vs 전체 평균
+- **경제적 지표(메인) — 전략 백테스트**: 상위 decile 평균 수익률은 자본배분·복리·낙폭이
+  빠진 숫자라 알파의 실제 효용을 말해주지 못한다. 같은 자본으로 굴렸을 때의 성과를
+  비교군과 나란히 본다.
+
+  **비교 전략 5종** (모두 종가 매수 → 익일 시가 매도, 왕복비용 0.21% 반영,
+  **walk-forward out-of-sample 예측 위에서만** 시뮬레이션):
+
+  | 전략 | 정의 |
+  |---|---|
+  | `model_top5` / `model_top10` | 모델 예측 상위 5개 / 10개 균등 매수 |
+  | `all_breakouts` | 그날 돌파 종목 전부 균등 매수 (= 이벤트 자체의 알파) |
+  | `random_5` | 무작위 5개 (시드 고정 20회 평균) |
+  | `market` | 전 종목 등가중 익일 시가 수익률 (벤치마크) |
+
+  `model_*`가 `all_breakouts`를 못 이기면 "모델은 무용, 이벤트만 유효"이고,
+  `all_breakouts`가 `market` 근처면 "이벤트도 무용"이다. 어느 쪽이든 발표 가능한 결과다.
+
+  **지표와 그 출처** (자의적 선택이 아님을 밝히기 위해 명시):
+  - 누적수익·CAGR·변동성·Sharpe·**Sortino·Calmar·Profit Factor·Expectancy·Alpha·Beta**
+    — `vectorbt` `vectorbt/returns/nb.py` 의 공식을 그대로 따른다. 특히 Sortino의
+    하방편차는 양수를 0으로 치환한 뒤 **전체 관측치**로 평균한다(음수만 평균내는 흔한
+    오구현은 하락이 드문 전략을 과대평가한다).
+  - **MDD 지속일수** — `backtrader` `analyzers/drawdown.py` 방식(낙폭 봉수를 세고 0에서 리셋).
+  - **SQN** = `√N × mean/std` — `backtrader` `analyzers/sqn.py`. Van K. Tharp 해석표
+    (2.0~2.4 평균 / 2.5~2.9 양호 / 3.0~5.0 우수), **표본 30건 미만은 NaN**.
+  - 무위험수익률은 연율을 `(1+rate)^(1/252)−1`로 **기하 환산**한다(backtrader convertrate).
+    기본값 0 — 이 전략은 하룻밤만 시장에 노출되고 나머지는 현금이라 차감이 과도한 페널티다.
+
+  **비용 민감도**: `nautilus_trader` 문서가 지적하듯 일봉 백테스트는 주문이 다른 시장
+  참여자와 어떻게 상호작용했을지를 재현하지 못한다. 우리는 종가·익일 시초를 가정하는데
+  둘 다 동시호가라 체결가가 불리할 수 있고, 상위 픽일수록 유동성이 몰린다. 그래서 단일
+  비용 가정에 기대지 않고 **추가 비용 0/0.1/0.2/0.4%p**를 물려 엣지가 사라지는 지점을
+  보고한다.
+
+  **채택하지 않은 것**: `vectorbt`·`backtrader`·`nautilus_trader`를 의존성으로 넣지
+  않는다 — 전략이 1일 보유·매일 유니버스 변경이라 groupby 20줄이면 충분하고, numba 의존
+  대형 라이브러리는 1주 일정에 설치 리스크만 크다. **지표 정의만 차용한다.**
+  `FinRL`의 강화학습은 §12 범위 밖이며, 항상 지수 벤치마크와 나란히 보고하는 관행만
+  가져왔다. `py-clob-client`는 Polymarket 예측시장용이고 저장소가 아카이브·비작동
+  상태라 무관하다.
 - 통계검정: bootstrap 95% CI(1,000회), permutation test(1,000회, H0 = 해당 피처군 무의미)
 - **다중검정 보정**: 5개 모델 × 2개 라벨을 비교하므로 Benjamini–Hochberg로 p값 보정.
   "여러 번 시도해서 하나 걸린 것 아니냐"는 질문을 선제 방어한다.
@@ -287,7 +353,7 @@ purge 필요성은 작지만, 같은 시장 충격을 공유하는 인접 표본
 └── docs/연구리포트.md
 ```
 
-**figure 7장:**
+**figure 10장:**
 
 1. D+1 수익률 분포 (52주 신고가 vs 급등주, 시가청산 vs 종가청산)
 2. **연도별 기대값** — 레짐 의존성
@@ -296,6 +362,9 @@ purge 필요성은 작지만, 같은 시장 충격을 공유하는 인접 표본
 5. 피처 중요도 (LightGBM gain, F1/F2/F3/F4 색상 구분)
 6. **셔플 CV vs walk-forward 편향 크기**
 7. **확률 보정 곡선** (보정 전/후)
+8. **전략별 누적 자산곡선**
+9. **전략 비교** (CAGR·Sharpe·MDD)
+10. **비용 민감도** (엣지 소멸 지점)
 
 ## 9. 일정 (6일)
 
@@ -306,7 +375,7 @@ purge 필요성은 작지만, 같은 시장 충격을 공유하는 인접 표본
 | D2 | `features_f1.py`, `features_f2.py` | 24개 피처 단위 테스트 통과, 결측률 5% 미만 |
 | D3 | `features_f3.py`, `features_f4.py` | qlib 공식과 수치 일치 테스트, 폴드별 TF-IDF가 학습 구간만 참조함을 테스트로 검증 |
 | D4 | `validate.py`, `models.py` | M0~M4 walk-forward 지표 산출, 보정 적용 |
-| D5 | 통계검정 + figure 7장 | png 7개, bootstrap CI · permutation p · BH 보정 p 산출 |
+| D5 | **백테스트** + 통계검정 + figure 10장 | 전략 5종 성과표 + 비용 민감도, png 10개, bootstrap CI · permutation p · BH 보정 p |
 | D6 | 리포트 + `predict.py` | 오늘자 실행 성공, 리포트 완성 |
 
 ## 10. 예상 결과와 대응
@@ -347,6 +416,7 @@ purge 필요성은 작지만, 같은 시장 충격을 공유하는 인접 표본
 - LLM API 호출 (재료는 기존 CSV의 키워드 분류를 사용)
 - 재료 데이터 신규 수집 (2026-07 이후 공백은 메우지 않음)
 - 모델 아키텍처 탐색 (LightGBM 고정) — 딥러닝 · 강화학습 미포함
+- 백테스트 라이브러리 채택 (vectorbt/backtrader/nautilus_trader) — 지표 정의만 차용
 - qlib 전체 158개 피처 (선별 20개만)
 
 ## 참고문헌
@@ -358,3 +428,11 @@ purge 필요성은 작지만, 같은 시장 충격을 공유하는 인접 표본
   (purged CV, embargo, meta-labeling, 표본 고유성)
 - Microsoft qlib — Alpha158 피처 정의: https://github.com/microsoft/qlib
   (`qlib/contrib/data/loader.py`)
+- polakowo/vectorbt — 성과지표 공식: https://github.com/polakowo/vectorbt
+  (`vectorbt/returns/nb.py`, `vectorbt/portfolio/base.py`)
+- mementum/backtrader — MDD 지속일수·SQN·Sharpe 환산: https://github.com/mementum/backtrader
+  (`backtrader/analyzers/{drawdown,sqn,sharpe}.py`, `backtrader/comminfo.py`)
+- nautechsystems/nautilus_trader — 일봉 백테스트의 체결 재현 한계(FillModel 문서):
+  https://github.com/nautechsystems/nautilus_trader
+- AI4Finance-Foundation/FinRL — 지수 벤치마크 병기 관행 (`finrl/plot.py`):
+  https://github.com/AI4Finance-Foundation/FinRL
