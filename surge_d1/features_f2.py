@@ -25,6 +25,20 @@ avg_gap_20d/gap_vol_20d 는 20봉 창에서 Open[t]/Close[t-1] 을 구하므로,
      ddof=0 관례)을 반환한다. 이미 NaN을 걸러낸 배열에 대해 .std()를
      쓰므로(=np.nanstd가 아님) size==1이어도 RuntimeWarning이 나지 않는다.
 
+  **재개봉(halt→resume) 오염 방지(코드리뷰 지적, 수정됨)**: np.isfinite만으로는
+  부족하다. mark_halted는 정지봉의 Open을 NaN으로 바꾸지만 Close는 직전값을
+  그대로 들고 있다(액면분할·감자 같은 자본 변경으로 정지되었다가 재개되면,
+  재개봉의 Open은 새 가격 기준의 진짜 값이라 유한하다). 그 결과
+  Open[t]/Close[t-1]에서 t-1이 정지봉이면 분모가 "정지 전 구가"의 낡은
+  가격이 되어, 재개봉에서 수백~수천 %짜리 가짜 갭이 유한값으로 계산되고
+  isfinite 필터를 통과해버린다(실사례: 003060, 2026-04-13~05-07 정지,
+  Close가 251에 고정된 채 05-08 Open=4000 → +1494% "갭"). 그래서 갭 항은
+  t-1(분모, 전일 종가)이 halted 봉이면 무조건 제외한다 — t(당일 Open)가
+  halted면 이미 NaN이라 isfinite가 걸러내므로 별도 처리가 필요 없다.
+  `halted` 컬럼이 있으면 그것을 쓰고(NaN 여부로 추론하지 않는다 — Close는
+  정지봉에서도 NaN이 아니므로 추론이 불가능), 컬럼이 없으면(합성 테스트
+  데이터 등) 전부 비정지로 간주한다.
+
 market_gap_prev 도 같은 원칙이다: build_market_index는 그날 계산 가능한
 종목이 0개(n==0)면 gap을 NaN으로 남긴다(sources.py 참조) — 이 역시 0.0으로
 대체하지 않고 NaN을 그대로 전달한다.
@@ -62,9 +76,19 @@ def compute_f2(df: pd.DataFrame, i: int, market: pd.DataFrame) -> dict:
     #       c.iloc[i-20:i]   의 k번째 원소는 Close[i-20+k] = Close[(i-19+k)-1]
     # 이므로 elementwise 나눗셈이 정확히 t, t-1 쌍이 된다. 마지막 원소
     # (k=19)는 Open[i]/Close[i-1] = 오늘의 gap_open 그 자체다.
-    gaps = (o.iloc[i - 19:i + 1].to_numpy() /
-            c.iloc[i - 20:i].to_numpy()) - 1.0
-    gaps = gaps[np.isfinite(gaps)]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        # Close[t-1]<=0(방어적 경계)이면 0-나눗셈 경고가 뜨지만 결과는
+        # inf/NaN이 되어 바로 아래 isfinite 필터에서 걸러지므로 무해하다.
+        gaps_raw = (o.iloc[i - 19:i + 1].to_numpy() /
+                    c.iloc[i - 20:i].to_numpy()) - 1.0
+    # t-1(분모)이 정지봉이면 Close[t-1]이 낡은 가격이라 갭이 오염된다(위
+    # docstring 참조) — halted 컬럼으로 그 항을 무조건 제외한다. t(당일
+    # Open)가 정지봉인 경우는 이미 NaN이라 isfinite가 걸러낸다.
+    if "halted" in df.columns:
+        denom_halted = df["halted"].iloc[i - 20:i].to_numpy(dtype=bool)
+    else:
+        denom_halted = np.zeros(20, dtype=bool)
+    gaps = gaps_raw[np.isfinite(gaps_raw) & ~denom_halted]
     if gaps.size == 0:
         avg_gap_20d = float("nan")
         gap_vol_20d = float("nan")
@@ -101,8 +125,23 @@ def compute_f2(df: pd.DataFrame, i: int, market: pd.DataFrame) -> dict:
     # 정렬: c.iloc[i-5:i] 의 k번째 원소는 Close[i-5+k],
     #       c.iloc[i-6:i-1] 의 k번째 원소는 Close[i-6+k] = Close[(i-5+k)-1]
     # 이므로 t=i-5..i-1(당일 제외 직전 5봉)의 일간수익률 5개를 얻는다.
-    prior = c.iloc[i - 5:i].to_numpy() / c.iloc[i - 6:i - 1].to_numpy() - 1.0
-    prior_surge_5d = 1.0 if np.any(prior >= SURGE_LEVEL) else 0.0
+    # 이 창(t-1 = i-6..i-2)은 HALT_LOOKBACK이 보장하는 무정지 구간(i-4..i+1)
+    # 밖이라, avg_gap_20d와 같은 이유로 t-1이 halted면 Close[t-1]이 낡은
+    # 가격이 되어 재개봉에서 가짜 "급등"이 잡힐 수 있다(실사례: 086960
+    # i=1499, halted 재개 직후 하루 수익률이 +150%로 계산되어 급등 오탐).
+    # 그래서 같은 원칙으로 t-1이 halted인 항은 제외한다.
+    prior_raw = c.iloc[i - 5:i].to_numpy() / c.iloc[i - 6:i - 1].to_numpy() - 1.0
+    if "halted" in df.columns:
+        prior_denom_halted = df["halted"].iloc[i - 6:i - 1].to_numpy(dtype=bool)
+    else:
+        prior_denom_halted = np.zeros(5, dtype=bool)
+    prior = prior_raw[~prior_denom_halted]
+    # 창의 전부가 정지 직후라 유효 비교가 하나도 없으면(현재 데이터에서는
+    # 발생하지 않음) "급등 증거 없음"으로 보아 0.0을 반환한다 — 이 피처는
+    # avg_gap_20d 같은 연속 평균이 아니라 0/1 지시자라, 결측을 NaN으로
+    # 구분해도 얻는 정보가 없다(0은 원래도 "증거 없음"과 "확인상 급등
+    # 없음"을 함께 나타낸다).
+    prior_surge_5d = 1.0 if (prior.size and np.any(prior >= SURGE_LEVEL)) else 0.0
 
     date = df.index[i]
     return {

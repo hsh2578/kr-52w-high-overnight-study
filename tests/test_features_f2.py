@@ -220,3 +220,132 @@ def test_market_gap_prev_직전일_시장갭이_NaN이면_NaN을_반환한다():
     mk.loc[df.index[i - 1], "gap"] = np.nan
     out = features_f2.compute_f2(df, i, mk)
     assert np.isnan(out["market_gap_prev"])
+
+
+# --- 추가: 재개봉(halt→resume) 오염 방지 (코드리뷰 지적, 수정) --------------
+# mark_halted는 정지봉의 Open을 NaN으로 바꾸지만 Close는 직전값(정지 전
+# 가격)을 그대로 들고 있다. 액면분할·감자 등으로 정지됐다가 재개되면
+# 재개봉의 Open은 새 가격 기준의 진짜(유한한) 값이라, Open[t]/Close[t-1]에서
+# t-1이 halted면 분모가 낡은 가격이 되어 가짜 초대형 갭이 isfinite를 통과해
+# 버린다. halted 컬럼으로 그 항을 무조건 제외해야 한다.
+
+def test_avg_gap_20d_재개봉_전일이_halted면_그_갭항을_제외한다():
+    df = synth()
+    df["halted"] = False
+    i = 280
+    halt_pos = i - 10          # 이 봉이 정지(따라서 Close가 낡은 값)
+    resume_pos = halt_pos + 1  # 재개봉: t-1=halt_pos, t=resume_pos
+    df.loc[df.index[halt_pos], "halted"] = True
+    # 재개봉 Open을 정지 전 종가의 50배로 — 액면분할/감자 후 새 가격 기준의
+    # 극단적이지만 '유한한' 값을 흉내낸다.
+    df.loc[df.index[resume_pos], "Open"] = df["Close"].iloc[halt_pos] * 50.0
+
+    out = features_f2.compute_f2(df, i, market_for(df))
+
+    # 오염된 항(resume_pos)을 뺀 나머지 19개 원소로 기대값을 직접 계산한다.
+    # (production 코드를 다시 호출하지 않고 독립적으로 재현 — 동어반복 방지)
+    o = df["Open"].to_numpy(dtype=float)
+    c = df["Close"].to_numpy(dtype=float)
+    idxs = [t for t in range(i - 19, i + 1) if t != resume_pos]
+    expected_terms = np.array([o[t] / c[t - 1] - 1.0 for t in idxs])
+    expected_mean = float(expected_terms.mean())
+    expected_std = float(expected_terms.std())  # ddof=0
+
+    contaminated = float(o[resume_pos] / c[halt_pos] - 1.0)
+    assert contaminated == pytest.approx(49.0)  # 필터링 안 하면 이 값이 섞임
+
+    assert out["avg_gap_20d"] == pytest.approx(expected_mean, rel=1e-9)
+    assert out["gap_vol_20d"] == pytest.approx(expected_std, rel=1e-9)
+    # 오염 항이 실제로 제외됐다는 방향성 증거: 포함됐다면 평균이 훨씬 커야 함
+    assert out["avg_gap_20d"] < 1.0
+
+
+def test_avg_gap_20d_창의_모든_전일이_halted면_0이_아니라_NaN을_반환한다():
+    """분모(t-1)가 전부 halted면 유효 갭이 하나도 남지 않는다 — 이 경우도
+    0.0이 아니라 NaN이어야 한다(Open 자체는 멀쩡히 유한해도 마찬가지)."""
+    df = synth()
+    i = 280
+    df["halted"] = False
+    # gaps 창의 분모는 c.iloc[i-20:i], 즉 위치 i-20..i-1 전부를 halted로.
+    for k in range(i - 20, i):
+        df.loc[df.index[k], "halted"] = True
+    out = features_f2.compute_f2(df, i, market_for(df))
+    assert np.isnan(out["avg_gap_20d"])
+    assert np.isnan(out["gap_vol_20d"])
+
+
+def test_avg_gap_20d_halted_컬럼이_전부_False면_컬럼없을때와_동일하다():
+    """회귀 가드: halted 컬럼이 있어도 전부 False면(=깨끗한 창) halted
+    컬럼이 아예 없을 때와 결과가 완전히 같아야 한다."""
+    df_no_col = synth()
+    df_all_false = synth()
+    df_all_false["halted"] = False
+    i = 280
+    out_no_col = features_f2.compute_f2(df_no_col, i, market_for(df_no_col))
+    out_all_false = features_f2.compute_f2(df_all_false, i, market_for(df_all_false))
+    for k in features_f2.F2_NAMES:
+        a, b = out_no_col[k], out_all_false[k]
+        if np.isnan(a) or np.isnan(b):
+            assert np.isnan(a) and np.isnan(b)
+        else:
+            assert a == pytest.approx(b)
+
+
+# --- 추가: gap_open/day_change의 NaN 폴백(prev_close<=0) 명시적 테스트 -----
+# 이 브랜치는 브리프가 승인한 5개 피처(avg_gap_20d/gap_vol_20d/
+# market_gap_prev/intraday_range/upper_shadow) 밖으로 확장한 것이다(코드
+# 리뷰에서 지적). 철학적으로 일관되고(0.0은 "갭 0%"라는 잘못된 주장이 되므로)
+# 실질적으로 죽은 분기이지만(정상 가격은 항상 양수), 명시적으로 테스트한다.
+
+def test_gap_open_day_change_전일종가가_0이하이면_NaN을_반환한다():
+    """prev_close<=0(정상 데이터에서는 사실상 발생하지 않는 방어적 케이스)
+    이면 0.0으로 조용히 떨어뜨리지 않고 NaN을 반환해야 한다."""
+    df = synth()
+    i = 280
+    df.loc[df.index[i - 1], "Close"] = 0.0
+    out = features_f2.compute_f2(df, i, market_for(df))
+    assert np.isnan(out["gap_open"])
+    assert np.isnan(out["day_change"])
+
+
+# --- 추가: prior_surge_5d 도 같은 재개봉 오염에 노출된다(자체 발견, 수정) ---
+# t=i-5..i-1의 창은 HALT_LOOKBACK이 보장하는 무정지 구간(i-4..i+1) 밖이다.
+# 실데이터 검증 중 086960(i=1499)에서 halted 재개봉 직후 일간수익률이
+# +150%로 잡혀 급등 오탐(1.0)이 나는 것을 확인했다 — avg_gap_20d와 동일한
+# 원인이므로 동일한 원칙(분모 t-1이 halted면 그 항 제외)을 적용한다.
+
+def test_prior_surge_5d_전일이_halted면_그_항을_제외한다():
+    df = synth()
+    df["halted"] = False
+    i = 280
+    halt_pos = i - 3           # 창 안(t-1 = i-6..i-2)의 한 지점을 정지로
+    resume_pos = halt_pos + 1  # t = halt_pos+1, 재개봉
+    df.loc[df.index[halt_pos], "halted"] = True
+    # 재개봉 종가를 정지 전 종가의 3배로 — 필터링 안 하면 300% "급등"으로
+    # 오탐되어야 정상(테스트가 무의미해지지 않도록 충분히 크게).
+    df.loc[df.index[resume_pos], "Close"] = df["Close"].iloc[halt_pos] * 3.0
+    out = features_f2.compute_f2(df, i, market_for(df))
+    assert out["prior_surge_5d"] == 0.0  # 오염 항이 제외되어 오탐이 없어야 함
+
+
+def test_prior_surge_5d_필터링_안하면_오탐됐을_것임을_확인():
+    """위 테스트의 전제 확인: halted 필터가 없다면 같은 데이터에서 실제로
+    오탐(1.0)이 나왔을 것 — 그래야 위 테스트가 실제로 뭔가를 검증한 것."""
+    df = synth()
+    i = 280
+    halt_pos = i - 3
+    resume_pos = halt_pos + 1
+    df.loc[df.index[resume_pos], "Close"] = df["Close"].iloc[halt_pos] * 3.0
+    c = df["Close"].to_numpy(dtype=float)
+    prior_unfiltered = c[i - 5:i] / c[i - 6:i - 1] - 1.0
+    assert np.any(prior_unfiltered >= features_f2.SURGE_LEVEL)
+
+
+def test_prior_surge_5d_halted_컬럼없어도_기존_동작_그대로():
+    """회귀 가드: halted 컬럼이 아예 없는 df(기존 테스트들의 전제)에서는
+    이전과 동일하게 동작해야 한다."""
+    df = synth()
+    i = 280
+    df.loc[df.index[i - 3], "Close"] = df["Close"].iloc[i - 4] * 1.20
+    out = features_f2.compute_f2(df, i, market_for(df))
+    assert out["prior_surge_5d"] == 1.0
