@@ -22,3 +22,8 @@ finance-datareader==0.9.101   # OHLCV 증분 갱신, 미국 지수
 
 # --- 테스트 ---
 pytest==9.1.0
+
+# --- 텍스트 순위 모형 (reason_rank.py 전용) ---
+torch==2.11.0            # CPU로 충분하다(문장 1만 건 임베딩에 몇 분)
+transformers==5.24.0    # kakaobank/kf-deberta-base
+sentencepiece
