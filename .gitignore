@@ -35,3 +35,4 @@ logs/
 .playwright-mcp/
 *.png
 !outputs/figures/*.png
+data/snap/
