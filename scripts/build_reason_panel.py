@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """급등 사유 문장 + 익일 시가 수익률 패널.
 
-대상: 그날의 급등주(위아 '오늘의 특징주 TOP20' + 텔레그램 '상한가 및 급등주').
+대상: 그날의 급등주(특징주 정리 서비스의 일일 상위 20종목 + 텔레그램 '상한가 및 급등주').
 라벨: 당일 종가 매수 → 익일 시가 매도, 왕복비용 0.21% 차감 (이 저장소의 y_raw와 같다).
 
-같은 (날짜, 종목)이 두 출처에 다 있으면 위아 문장을 쓴다(기간이 길어 문체가 일관된다).
+같은 (날짜, 종목)이 두 출처에 다 있으면 정리 서비스 문장을 쓴다(기간이 길어 문체가 일관된다).
 
 가격은 로컬 일봉 캐시(~2026-08-27)를 먼저 쓰고, 그 뒤 구간과 캐시에 없는 종목만
 FinanceDataReader로 받는다. 받은 것은 data/reason_px.pkl 에 쌓아 다시 받지 않는다.
@@ -39,7 +39,7 @@ def load_rows() -> pd.DataFrame:
     t = t[t["kind"] == "surge_list"]
     t = pd.DataFrame({"date": t["date"], "code": t["code"], "name": t["name"],
                       "chg": t["chg"], "reason": t["reason"].astype(str), "src": "taja"})
-    # 위아에 코드가 없는 신규 상장 종목은 텔레그램의 이름·코드 쌍으로 메운다
+    # 정리 서비스 자료에 코드가 없는 신규 상장 종목은 텔레그램의 이름·코드 쌍으로 메운다
     n2c = dict(t.dropna(subset=["code"])[["name", "code"]].drop_duplicates("name").values)
     w["code"] = w["code"].fillna(w["name"].map(n2c))
     df = pd.concat([w, t], ignore_index=True).dropna(subset=["code"])

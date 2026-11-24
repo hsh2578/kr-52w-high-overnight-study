@@ -30,9 +30,9 @@ import pandas as pd
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-HOLLYKR_CACHE = Path(
-    r"C:\Users\hsh\Desktop\03_투자·코딩 프로젝트\vibecoding\주식 자동매매시스템과 관련  프로젝트\.cache"
-)
+HOLLYKR_CACHE = config.HOLLYKR_CACHE
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from surge_d1 import config  # noqa: E402
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUT_PATH = PROJECT_ROOT / "data" / "ohlcv_cache.pkl"
 START_DATE = "2019-01-01"

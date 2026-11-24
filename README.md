@@ -177,7 +177,9 @@ python -m studies.feature_study
 
 일봉 캐시, 수급(키움 REST), 상장주식수(KRX), 급등 사유 텍스트는 **저장소에 포함하지
 않았습니다.** 수집 스크립트는 `scripts/`에 있고 API 키는 각자 발급해야 합니다.
-`surge_d1/config.py`의 자료 경로는 작성자 PC 기준이라 바꿔야 합니다.
+급등 사유 문장은 유료 구독 서비스와 공개 텔레그램 채널에서 본 것이라 원문을 다시 배포하지
+않고, 집계 결과만 `outputs/`에 둡니다. 자료 위치는 `local_paths.example.json`을
+`local_paths.json`으로 복사해 각자 PC에 맞게 적습니다.
 
 </details>
 

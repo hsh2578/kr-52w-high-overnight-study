@@ -28,10 +28,12 @@ import requests
 
 sys.stdout.reconfigure(encoding="utf-8")
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from surge_d1 import config  # noqa: E402
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CACHE = PROJECT_ROOT / "data" / "ohlcv_cache.pkl"
-CATALYST = Path(r"C:\Users\hsh\Desktop\모의투자대회\data\특징주_재료_상승률_2년.csv")
-ENV = Path(r"C:\Users\hsh\Desktop\모의투자대회\.env")
+CATALYST = config.CATALYST_CSV
+ENV = config.external(".env")
 KRX_BASE = "https://data-dbg.krx.co.kr/svc/apis"
 
 LIMIT = 0.30          # 가격제한폭 ±30% (2015-06-15 이후)

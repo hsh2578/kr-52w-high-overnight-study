@@ -30,8 +30,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from surge_d1 import config  # noqa: E402
 
-TG_DB = Path(r"C:\Users\hsh\Desktop\03_투자·코딩 프로젝트\vibecoding"
-             r"\텔레그램 요약 프로그램\data\telegram_summary.db")
+TG_DB = config.external("telegram.db")
 OUT = config.PROJECT_ROOT / "data" / "tg_reasons.parquet"
 THEMES_OUT = config.PROJECT_ROOT / "data" / "tg_themes.parquet"
 

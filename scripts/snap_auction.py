@@ -27,9 +27,11 @@ from datetime import datetime
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from surge_d1 import config  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 SNAP = ROOT / "data" / "snap"
-sys.path.insert(0, r"C:\Users\hsh\Desktop\03_투자·코딩 프로젝트\vibecoding\단기 트레이딩 전략")
+sys.path.insert(0, str(config.external("kis_client_dir")))   # kis.py(시세 조회 클라이언트)가 있는 폴더
 
 MIN_RISE = 5.0     # 당일 등락률 하한(%). 52주 신고가 돌파일은 대부분 이 위에 있다
 

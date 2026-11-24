@@ -29,12 +29,13 @@ import pandas as pd
 warnings.filterwarnings("ignore")
 sys.stdout.reconfigure(encoding="utf-8")
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from surge_d1 import config  # noqa: E402
 from lightgbm import LGBMClassifier, LGBMRegressor      # noqa: E402
 from scipy.stats import ttest_ind                       # noqa: E402
 from sklearn.metrics import roc_auc_score               # noqa: E402
 
-CSV = (r"C:\Users\hsh\Desktop\03_투자·코딩 프로젝트\vibecoding\주식웹사이트\국내주식웹사이트"
-       r"\stock-screener-kr\ml\data\training_data_v2.csv")
+CSV = str(config.external("screener_training.csv"))
 OUT = str(Path(__file__).resolve().parents[1] / "outputs" / "ai_vs_plain.csv")
 
 FEATS = ["breakout_pct", "volume_surge", "close_strength", "base_length",

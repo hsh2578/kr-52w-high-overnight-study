@@ -1,0 +1,8 @@
+{
+  "ohlcv_cache_dir": "일봉 캐시 폴더 (ohlcv/ohlcv_cache.pkl, krx_master_*.pkl)",
+  "catalyst.csv": "급등 사유 문장 CSV (날짜·종목·코드·사유)",
+  ".env": "KRX·KIS API 키가 든 .env",
+  "telegram.db": "텔레그램 수집 SQLite DB",
+  "kis_client_dir": "KIS 시세 조회 클라이언트(kis.py)가 있는 폴더",
+  "screener_training.csv": "주식 스크리너의 학습 자료 CSV (studies/ 일부만 사용)"
+}

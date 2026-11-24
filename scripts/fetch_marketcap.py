@@ -31,8 +31,10 @@ import requests
 
 sys.stdout.reconfigure(encoding="utf-8")
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from surge_d1 import config  # noqa: E402
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-ENV_PATH = Path(r"C:\Users\hsh\Desktop\모의투자대회\.env")
+ENV_PATH = config.external(".env")
 OUT = PROJECT_ROOT / "data" / "list_shares.parquet"
 BASE = "https://data-dbg.krx.co.kr/svc/apis"
 PATHS = ("sto/stk_bydd_trd", "sto/ksq_bydd_trd")   # 코스피 · 코스닥

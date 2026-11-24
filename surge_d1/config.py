@@ -1,8 +1,19 @@
 # -*- coding: utf-8 -*-
 """프로젝트 전역 상수와 경로. 스펙 §3.1, §6, §7.2 참조."""
+import json
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+# 이 저장소에 들어 있지 않은 자료의 위치. PC마다 달라서 local_paths.json(커밋하지 않음)에
+# 적는다. 그 파일이 없으면 data/external/ 아래의 같은 이름을 본다.
+# 키 목록은 local_paths.example.json 참고.
+_LOCAL_FILE = PROJECT_ROOT / "local_paths.json"
+_LOCAL = json.loads(_LOCAL_FILE.read_text(encoding="utf-8")) if _LOCAL_FILE.exists() else {}
+
+
+def external(key: str) -> Path:
+    return Path(_LOCAL.get(key, PROJECT_ROOT / "data" / "external" / key))
 
 # --- 이벤트 정의 ---
 # 스크리너 실전 조건을 그대로 옮겼다. 종가 252봉 신고가라는 단순 정의 대신
@@ -73,13 +84,9 @@ RANDOM_SEED = 42
 
 # --- 경로 ---
 LIST_SHARES_PATH = PROJECT_ROOT / "data" / "list_shares.parquet"   # 시점 상장주식수
-HOLLYKR_CACHE = Path(
-    r"C:\Users\hsh\Desktop\03_투자·코딩 프로젝트\vibecoding\주식 자동매매시스템과 관련  프로젝트\.cache"
-)
+HOLLYKR_CACHE = external("ohlcv_cache_dir")
 CACHE_PATH = PROJECT_ROOT / "data" / "ohlcv_cache.pkl"
-CATALYST_CSV = Path(
-    r"C:\Users\hsh\Desktop\금융공모전\모의투자대회\data\특징주_재료_상승률_2년.csv"
-)
+CATALYST_CSV = external("catalyst.csv")
 DATASET_PATH = PROJECT_ROOT / "data" / "dataset.parquet"
 FIGURES_DIR = PROJECT_ROOT / "outputs" / "figures"
 RESULTS_DIR = PROJECT_ROOT / "outputs"
