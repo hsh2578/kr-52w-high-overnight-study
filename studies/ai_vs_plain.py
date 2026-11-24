@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 import warnings
 
 import numpy as np
@@ -34,7 +35,7 @@ from sklearn.metrics import roc_auc_score               # noqa: E402
 
 CSV = (r"C:\Users\hsh\Desktop\03_투자·코딩 프로젝트\vibecoding\주식웹사이트\국내주식웹사이트"
        r"\stock-screener-kr\ml\data\training_data_v2.csv")
-OUT = r"C:\Users\hsh\Desktop\03_투자·코딩 프로젝트\급등주 분석프로그램\outputs\ai_vs_plain.csv"
+OUT = str(Path(__file__).resolve().parents[1] / "outputs" / "ai_vs_plain.csv")
 
 FEATS = ["breakout_pct", "volume_surge", "close_strength", "base_length",
          "volatility_contraction", "volume_dry_up", "ma200_slope",

@@ -23,7 +23,7 @@ from sklearn.model_selection import KFold
 
 from surge_d1 import config, dataset, features_f4, validate
 
-# 모델 선택은 실측으로 정했다(outputs/model_comparison.csv, _model_compare.py).
+# 모델 선택은 실측으로 정했다(outputs/model_comparison.csv, studies/model_compare.py).
 # 상한가를 이벤트에서 뺀 뒤(5,675건) 10개 모델을 같은 walk-forward 4폴드로
 # 비교한 결과:
 #   ExtraTrees   AUC 0.5542 / 상위20% 승률 47.7% / 수익 +0.436%   <- 채택
