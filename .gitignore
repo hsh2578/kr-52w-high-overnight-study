@@ -36,3 +36,6 @@ logs/
 *.png
 !outputs/figures/*.png
 data/snap/
+
+# 다른 주제의 팀 발표 자료 — 이 저장소의 연구가 아니다
+sprint1*.pdf
