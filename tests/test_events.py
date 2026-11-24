@@ -19,6 +19,21 @@ def make_df(n=300, close_base=100.0, vol=1000.0):
     return df
 
 
+@pytest.fixture
+def big_shares(monkeypatch):
+    """모든 코드에 시가총액 1,000억을 넘기는 상장주식수를 준다.
+
+    collect_events는 시점 시가총액을 모르는 종목을 버리므로, 합성 봉으로
+    이벤트 수집을 검사하려면 주식수도 같이 넣어줘야 한다."""
+    from surge_d1 import sources
+
+    class _Any(dict):
+        def get(self, key, default=None):
+            return pd.Series([1e10], index=pd.to_datetime(["2019-01-01"]))
+
+    monkeypatch.setattr(sources, "load_list_shares", lambda: _Any())
+
+
 def test_is_breakout_직전5봉에_거래정지가_있으면_False():
     df = make_df()
     i = len(df) - 2
@@ -38,19 +53,38 @@ def test_is_breakout_익일이_거래정지면_False():
     assert events.is_breakout(df, i) is False
 
 
-def test_is_breakout_신고가와_거래량과_거래대금을_모두_요구한다():
+def test_is_breakout_52주고가를_1_5퍼센트_넘겨야_한다():
     df = make_df()
     i = len(df) - 2
     # 기본 상태: 신고가 아님(전부 동일가) → False
     assert events.is_breakout(df, i) is False
 
-    # 신고가 + 거래량 2배 + 거래대금 충분
-    df.loc[df.index[i], "Close"] = 128.0     # +28% — 가격제한(0.32) 이내
-    df.loc[df.index[i], "Volume"] = 1e9      # 128 * 1e9 = 1.28e11 > 1e10
+    # 52주 고가(High 101) x 1.015 = 102.515 를 못 넘으면 돌파가 아니다
+    df.loc[df.index[i], "Close"] = 102.0
+    assert events.is_breakout(df, i) is False
+
+    df.loc[df.index[i], "Close"] = 128.0     # +28% — 상한가(29.5%) 미만
     assert events.is_breakout(df, i) is True
 
-    # 거래량만 부족하면 False
-    df.loc[df.index[i], "Volume"] = 1000.0
+    # 거래량은 조건이 아니다(구 정의에만 있었다)
+    df.loc[df.index[i], "Volume"] = 1.0
+    assert events.is_breakout(df, i) is True
+
+
+def test_is_breakout_직전15봉에_이미_넘었으면_신규돌파가_아니다():
+    df = make_df()
+    i = len(df) - 2
+    df.loc[df.index[i], "Close"] = 128.0
+    df.loc[df.index[i - 3], "Close"] = 110.0   # 사흘 전에 이미 102.515를 넘음
+    assert events.is_breakout(df, i) is False
+
+
+def test_is_breakout_150일선이_내려가는_중이면_False():
+    df = make_df()
+    i = len(df) - 2
+    # 150일선 창의 앞쪽 20봉만 높게 둔다 → 20일 전 평균이 지금보다 높다(하락 추세)
+    df.loc[df.index[i - 169:i - 149], "Close"] = 400.0
+    df.loc[df.index[i], "Close"] = 128.0
     assert events.is_breakout(df, i) is False
 
 
@@ -154,7 +188,7 @@ def test_load_excluded_codes_어느_목록에도_없는_코드는_제외되지_�
     assert "999999" not in out          # 상장폐지 등 미상 코드는 제외집합에 없어야 한다
 
 
-def test_collect_events_제외집합에_있으면_빠지고_모르는코드는_남는다():
+def test_collect_events_제외집합에_있으면_빠지고_모르는코드는_남는다(big_shares):
     df = make_df()
     i = len(df) - 2
     df.loc[df.index[i], "Close"] = 128.0     # +28% — 가격제한(0.32) 이내
@@ -168,7 +202,7 @@ def test_collect_events_제외집합에_있으면_빠지고_모르는코드는_�
     assert len(events.collect_events({"000815": df}, exclude=None)) == 1
 
 
-def test_collect_events_universe_json_제외코드는_이벤트에서_빠진다(monkeypatch, tmp_path):
+def test_collect_events_universe_json_제외코드는_이벤트에서_빠진다(monkeypatch, tmp_path, big_shares):
     df = make_df()
     i = len(df) - 2
     df.loc[df.index[i], "Close"] = 128.0
@@ -177,13 +211,14 @@ def test_collect_events_universe_json_제외코드는_이벤트에서_빠진다(
     root = _write_universe(_isolated_root(tmp_path), excluded=["069500"])  # ETF 예시
     monkeypatch.setattr(events.config, "PROJECT_ROOT", root)
     ex = events.load_excluded_codes()
+    assert len(events.collect_events({"069500": df}, exclude=None)) == 1   # 필터가 없으면 잡힌다
     assert len(events.collect_events({"069500": df}, exclude=ex)) == 0
 
 
 def test_add_market_adjusted_그날_중앙값을_뺀다():
     ev = pd.DataFrame({
         "date": pd.to_datetime(["2024-01-02"] * 3 + ["2024-01-03"]),
-        "y_raw": [0.01, 0.02, 0.03, 0.05],
+        "y_exit": [0.01, 0.02, 0.03, 0.05],   # 청산 시점(config.EXIT)에 맞는 라벨
     })
     out = events.add_market_adjusted(ev)
     # 1/2 중앙값 0.02 → -0.01, 0.0, 0.01 / 1/3은 단일이라 0.0
@@ -212,7 +247,7 @@ def test_labels_y_hold20_미래봉없으면_NaN이지만_다른_라벨은_정상
     assert out["y_raw"] == pytest.approx(0.05 - config.COST)
 
 
-def test_collect_events_20봉_미래가_없어도_이벤트는_생성되고_y_hold20만_NaN():
+def test_collect_events_20봉_미래가_없어도_이벤트는_생성되고_y_hold20만_NaN(big_shares):
     """시계열 맨 끝 이벤트를 20봉 미래가 없다고 통째로 버리면 최근 한달치 이벤트가
     전부 사라진다 — 라이브 데모에서 가장 보고 싶은 구간이라 반드시 살려야 한다."""
     df = make_df()
@@ -239,12 +274,25 @@ def test_labels_y_up은_비용을_빼지_않은_총상승_지표다():
 
 # --- 추가 3: KRX 일일 가격제한(±30%, 틱 반올림 여유 포함 0.32) 위반 봉 배제 ---
 
-def test_is_breakout_가격제한_틱반올림_30_1퍼센트는_통과():
+def test_is_breakout_상한가는_종가에_살_수_없으므로_제외한다():
     df = make_df()
     i = len(df) - 2
     df.loc[df.index[i], "Close"] = 130.1     # +30.1% — 상한가 틱 반올림으로 흔한 값
-    df.loc[df.index[i], "Volume"] = 1e9
+    assert events.is_breakout(df, i) is False
+    df.loc[df.index[i], "Close"] = 129.6     # +29.6% — 경계(29.5%) 바로 위
+    assert events.is_breakout(df, i) is False
+    df.loc[df.index[i], "Close"] = 129.4
     assert events.is_breakout(df, i) is True
+
+
+def test_collect_events_시가총액_1000억_미만은_빠진다(monkeypatch):
+    from surge_d1 import sources
+    df = make_df()
+    i = len(df) - 2
+    df.loc[df.index[i], "Close"] = 128.0
+    small = pd.Series([1e6], index=pd.to_datetime(["2019-01-01"]))   # 시총 1.28억
+    monkeypatch.setattr(sources, "load_list_shares", lambda: {"000001": small})
+    assert len(events.collect_events({"000001": df}, exclude=None)) == 0
 
 
 def test_is_breakout_가격제한_35퍼센트는_거부():

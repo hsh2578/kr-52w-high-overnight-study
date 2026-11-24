@@ -74,11 +74,11 @@ RANDOM_SEED = 42
 # --- 경로 ---
 LIST_SHARES_PATH = PROJECT_ROOT / "data" / "list_shares.parquet"   # 시점 상장주식수
 HOLLYKR_CACHE = Path(
-    r"C:\Users\hsh\Desktop\vibecoding\주식 자동매매시스템과 관련  프로젝트\.cache"
+    r"C:\Users\hsh\Desktop\03_투자·코딩 프로젝트\vibecoding\주식 자동매매시스템과 관련  프로젝트\.cache"
 )
 CACHE_PATH = PROJECT_ROOT / "data" / "ohlcv_cache.pkl"
 CATALYST_CSV = Path(
-    r"C:\Users\hsh\Desktop\모의투자대회\data\특징주_재료_상승률_2년.csv"
+    r"C:\Users\hsh\Desktop\금융공모전\모의투자대회\data\특징주_재료_상승률_2년.csv"
 )
 DATASET_PATH = PROJECT_ROOT / "data" / "dataset.parquet"
 FIGURES_DIR = PROJECT_ROOT / "outputs" / "figures"

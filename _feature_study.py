@@ -41,9 +41,13 @@ def daily_ic(d: pd.DataFrame, col: str) -> tuple[float, float]:
     """일별 순위상관의 평균과 t값. 하루에 3종목 미만인 날은 건너뛴다."""
     ics = []
     for _, g in d.groupby("date"):
-        if len(g) < 3 or g[col].nunique() < 3:
+        # NaN을 먼저 버린다. 이걸 빼먹으면 결측이 하나라도 있는 날은
+        # spearmanr이 NaN을 돌려주고 그날이 통째로 사라진다 — 결측 17%인
+        # 수급 변수가 "신호 없음"으로 잘못 나온 원인이었다.
+        gg = g[[col, LABEL]].dropna()
+        if len(gg) < 3 or gg[col].nunique() < 3:
             continue
-        r = spearmanr(g[col], g[LABEL]).statistic
+        r = spearmanr(gg[col], gg[LABEL]).statistic
         if np.isfinite(r):
             ics.append(r)
     if len(ics) < 30:

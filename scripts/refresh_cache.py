@@ -31,7 +31,7 @@ import pandas as pd
 sys.stdout.reconfigure(encoding="utf-8")
 
 HOLLYKR_CACHE = Path(
-    r"C:\Users\hsh\Desktop\vibecoding\주식 자동매매시스템과 관련  프로젝트\.cache"
+    r"C:\Users\hsh\Desktop\03_투자·코딩 프로젝트\vibecoding\주식 자동매매시스템과 관련  프로젝트\.cache"
 )
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUT_PATH = PROJECT_ROOT / "data" / "ohlcv_cache.pkl"
